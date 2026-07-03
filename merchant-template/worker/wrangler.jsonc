@@ -1,0 +1,35 @@
+{
+  "name": "restaurant-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "MERCHANT_DB",
+      "database_name": "restaurant-db",
+      "database_id": ""
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "ASSETS", "bucket_name": "restaurant-assets" },
+    { "binding": "RECORDINGS", "bucket_name": "call-recordings" }
+  ],
+  "vectorize": [
+    { "binding": "KNOWLEDGE", "index_name": "knowledge-index" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "CHAT_ROOM_DO", "class_name": "ChatRoom" },
+      { "name": "PHONE_CALL_DO", "class_name": "PhoneCall" }
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "vars": {
+    "CENTRAL_AUTH_URL": "",
+    "MERCHANT_TOKEN": ""
+  }
+}

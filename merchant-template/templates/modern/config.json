@@ -1,0 +1,7 @@
+{
+  "name": "现代简约",
+  "description": "适合西餐、咖啡厅、轻食，白绿/白灰配色简约时尚",
+  "features": ["在线菜单", "在线下单", "营业时间", "客服聊天"],
+  "colorScheme": ["#2E7D32", "#1B5E20", "#F5F5F5"],
+  "author": "Rose SaaS"
+}

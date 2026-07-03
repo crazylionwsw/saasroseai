@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{RESTAURANT_NAME}} - 联系我们</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="logo">
+        <img src="{{LOGO_URL}}" alt="{{RESTAURANT_NAME}}">
+        <h1>{{RESTAURANT_NAME}}</h1>
+      </div>
+      <button class="hamburger" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="nav">
+        <a href="index.html">首页</a>
+        <a href="menu.html">菜单</a>
+        <a href="order.html">下单</a>
+        <a href="contact.html" class="active">联系我们</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="contact-page">
+    <div class="container">
+      <h2 class="section-title">联系我们</h2>
+      <div class="contact-grid">
+        <div class="contact-info-card">
+          <div class="contact-item">
+            <span class="icon">📍</span>
+            <div>
+              <h4>地址</h4>
+              <p>{{ADDRESS}}</p>
+            </div>
+          </div>
+          <div class="contact-item">
+            <span class="icon">📞</span>
+            <div>
+              <h4>电话</h4>
+              <p><a href="tel:{{PHONE}}">{{PHONE}}</a></p>
+            </div>
+          </div>
+          <div class="contact-item">
+            <span class="icon">🕐</span>
+            <div>
+              <h4>营业时间</h4>
+              <p>{{BUSINESS_HOURS}}</p>
+            </div>
+          </div>
+          <div class="contact-item">
+            <span class="icon">🌐</span>
+            <div>
+              <h4>关注我们</h4>
+              <div class="social-links">
+                <a class="social-link" href="{{WECHAT_URL}}" target="_blank" title="微信">💬</a>
+                <a class="social-link" href="{{DOUYIN_URL}}" target="_blank" title="抖音">🎵</a>
+                <a class="social-link" href="{{XIAOHONGSHU_URL}}" target="_blank" title="小红书">📕</a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="map-placeholder">
+          <p>地图加载中...<br><small>{{ADDRESS}}</small></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 {{RESTAURANT_NAME}} - Powered by Rose SaaS</p>
+    </div>
+  </footer>
+
+  <button class="chat-btn" aria-label="在线客服">💬</button>
+
+  <div class="chat-modal">
+    <div class="chat-header">在线客服</div>
+    <div class="chat-messages">
+      <div class="chat-msg received">您好！欢迎光临 {{RESTAURANT_NAME}}，请问有什么可以帮您？</div>
+    </div>
+    <div class="chat-input-area">
+      <input class="chat-input" type="text" placeholder="输入消息...">
+      <button class="chat-send">发送</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

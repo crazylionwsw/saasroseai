@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{RESTAURANT_NAME}} - 首页</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="logo">
+        <img src="{{LOGO_URL}}" alt="{{RESTAURANT_NAME}}">
+        <h1>{{RESTAURANT_NAME}}</h1>
+      </div>
+      <button class="hamburger" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="nav">
+        <a href="index.html" class="active">首页</a>
+        <a href="menu.html">菜单</a>
+        <a href="order.html">下单</a>
+        <a href="contact.html">联系我们</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <img class="hero-img" src="{{COVER_URL}}" alt="{{RESTAURANT_NAME}}">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <h2>{{RESTAURANT_SLOGAN}}</h2>
+      <p>{{RESTAURANT_DESC_SHORT}}</p>
+      <a href="order.html" class="btn">立即下单</a>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">关于我们</h2>
+      <div class="about-content">
+        <p>{{RESTAURANT_DESC}}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0;">
+    <div class="container">
+      <h2 class="section-title">推荐菜品</h2>
+      <div class="featured-grid" data-menu-container></div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0;">
+    <div class="container">
+      <h2 class="section-title">营业信息</h2>
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="icon">📞</div>
+          <h3>电话</h3>
+          <p><a href="tel:{{PHONE}}">{{PHONE}}</a></p>
+        </div>
+        <div class="info-card">
+          <div class="icon">📍</div>
+          <h3>地址</h3>
+          <p>{{ADDRESS}}</p>
+        </div>
+        <div class="info-card">
+          <div class="icon">🕐</div>
+          <h3>营业时间</h3>
+          <p>{{BUSINESS_HOURS}}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 {{RESTAURANT_NAME}} - Powered by Rose SaaS</p>
+    </div>
+  </footer>
+
+  <button class="chat-btn" aria-label="在线客服">💬</button>
+
+  <div class="chat-modal">
+    <div class="chat-header">在线客服</div>
+    <div class="chat-messages">
+      <div class="chat-msg received">您好！欢迎光临 {{RESTAURANT_NAME}}，请问有什么可以帮您？</div>
+    </div>
+    <div class="chat-input-area">
+      <input class="chat-input" type="text" placeholder="输入消息...">
+      <button class="chat-send">发送</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

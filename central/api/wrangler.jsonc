@@ -1,0 +1,23 @@
+{
+  "name": "rose-saas-central-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "CENTRAL_DB",
+      "database_name": "rose-saas-central",
+      "database_id": "12981012-fca7-4135-93ef-920b976a8ea7"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "TEMPLATES_R2",
+      "bucket_name": "rose-saas-templates"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+
+}

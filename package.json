@@ -1,0 +1,27 @@
+{
+  "name": "rose-saas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "餐饮门店在线智能服务体平台",
+  "scripts": {
+    "dev:central-api": "wrangler dev --config central/api/wrangler.jsonc",
+    "dev:central-ui": "wrangler pages dev central/admin-ui --port 8788",
+    "deploy:central-api": "wrangler deploy --config central/api/wrangler.jsonc",
+    "deploy:central-ui": "wrangler pages deploy central/admin-ui --project-name rose-saas-admin",
+    "test": "vitest run --config tests/vitest.config.ts",
+    "test:watch": "vitest --config tests/vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250401.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0",
+    "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "itty-router": "^5.0.18",
+    "jose": "^6.0.10",
+    "googleapis": "^148.0.0",
+    "pdf-parse": "^1.1.1"
+  }
+}

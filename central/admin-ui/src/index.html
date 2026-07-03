@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rose SaaS 管理中心</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h2>Rose SaaS</h2>
+      </div>
+      <nav id="sidebar-nav">
+        <a class="menu-item active" data-page="dashboard">
+          <span class="menu-icon">📊</span>
+          <span>仪表盘</span>
+        </a>
+        <a class="menu-item" data-page="merchants">
+          <span class="menu-icon">🏪</span>
+          <span>商户管理</span>
+        </a>
+        <a class="menu-item" data-page="templates">
+          <span class="menu-icon">📋</span>
+          <span>模板管理</span>
+        </a>
+        <a class="menu-item" data-page="scrape-jobs">
+          <span class="menu-icon">🌐</span>
+          <span>采集任务</span>
+        </a>
+        <!-- Deployments shown per-merchant in merchant detail view -->
+        <a class="menu-item" data-page="settings">
+          <span class="menu-icon">⚙️</span>
+          <span>系统设置</span>
+        </a>
+      </nav>
+    </aside>
+    <div id="main">
+      <header id="topbar">
+        <button id="sidebar-toggle">☰</button>
+        <h1 id="topbar-title">Rose SaaS 管理中心</h1>
+        <span id="current-time"></span>
+      </header>
+      <main id="main-content"></main>
+    </div>
+  </div>
+
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-content"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

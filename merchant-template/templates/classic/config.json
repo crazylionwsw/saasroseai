@@ -1,0 +1,7 @@
+{
+  "name": "经典中餐",
+  "description": "适合传统中餐、家常菜馆，红金配色大气喜庆",
+  "features": ["在线菜单", "图片轮播", "在线下单", "营业时间", "联系方式"],
+  "colorScheme": ["#8B0000", "#FFD700", "#FFF8DC"],
+  "author": "Rose SaaS"
+}
