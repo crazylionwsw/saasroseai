@@ -156,7 +156,7 @@ export async function handleVerifyMerchant(request: Request, env: Env): Promise<
     }
     const token = authHeader.slice(7)
     const payload = await verifyToken(token, env)
-    if (!payload) return errorResponse('Invalid or expired token', 401)
+    if (!payload || !payload.merchantId) return errorResponse('Invalid or expired token', 401)
     const merchant = await env.CENTRAL_DB.prepare(
       'SELECT id, status, plan FROM merchants WHERE id = ?'
     ).bind(payload.merchantId).first() as Pick<Merchant, 'id' | 'status' | 'plan'> | null
@@ -181,7 +181,7 @@ export async function handleRegenerateToken(request: Request, env: Env, merchant
     const token = await generateToken(merchantId, merchant.plan, env)
     const tokenHash = await hashToken(token)
     await env.CENTRAL_DB.prepare(
-      'INSERT INTO merchant_tokens (merchant_id, token_hash, created_at) VALUES (?, ?, ?)'
+      'INSERT OR REPLACE INTO merchant_tokens (merchant_id, token_hash, issued_at) VALUES (?, ?, ?)'
     ).bind(merchantId, tokenHash, new Date().toISOString()).run()
     await logAudit(env, 'TOKEN_REGENERATE', 'merchant', merchantId,
       'Regenerated merchant token', getClientIP(request))
