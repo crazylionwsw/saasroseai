@@ -73,28 +73,29 @@ async function renderDashboard() {
   try {
     const data = await api('/api/merchants')
     const merchants = data.merchants ?? data ?? []
-    const total = merchants.length
-    const active = merchants.filter(m => m.status === 'active').length
-    const frozen = merchants.filter(m => m.status === 'frozen').length
-    const expired = merchants.filter(m => m.status === 'expired').length
+    const filtered = merchants.filter(m => m.status !== 'deleted')
+    const total = filtered.length
+    const active = filtered.filter(m => m.status === 'active').length
+    const frozen = filtered.filter(m => m.status === 'frozen').length
+    const expired = filtered.filter(m => m.status === 'expired').length
     main.innerHTML = `
       <div class="page-header">
         <h2>仪表盘</h2>
       </div>
       <div class="stat-cards">
-        <div class="stat-card total">
+        <div class="stat-card total" onclick="navigate('merchants')">
           <div class="stat-value">${total}</div>
           <div class="stat-label">商户总数</div>
         </div>
-        <div class="stat-card active">
+        <div class="stat-card active" onclick="navigate('merchants')">
           <div class="stat-value">${active}</div>
           <div class="stat-label">活跃商户</div>
         </div>
-        <div class="stat-card frozen">
+        <div class="stat-card frozen" onclick="navigate('merchants')">
           <div class="stat-value">${frozen}</div>
           <div class="stat-label">冻结商户</div>
         </div>
-        <div class="stat-card expired">
+        <div class="stat-card expired" onclick="navigate('merchants')">
           <div class="stat-value">${expired}</div>
           <div class="stat-label">过期商户</div>
         </div>
@@ -115,7 +116,8 @@ async function renderMerchants() {
   main.innerHTML = '<div class="loading">加载商户列表</div>'
   try {
     const data = await api('/api/merchants')
-    const merchants = data.merchants ?? data ?? []
+    const merchants = (data.merchants ?? data ?? []).filter(m => m.status !== 'deleted')
+    const statusMap = { active: '活跃', frozen: '冻结', expired: '过期' }
     main.innerHTML = `
       <div class="page-header">
         <h2>商户管理</h2>
@@ -148,7 +150,7 @@ async function renderMerchants() {
                 <tr data-name="${(m.name || '').toLowerCase()}" data-subdomain="${(m.subdomain || '').toLowerCase()}" data-status="${m.status || ''}">
                   <td><a href="#" onclick="event.preventDefault();navigate('merchant-detail',{id:'${m.id}'})" style="color:var(--primary);text-decoration:none;font-weight:500;">${m.name || '-'}</a></td>
                   <td>${m.subdomain || '-'}</td>
-                  <td><span class="badge ${m.status || 'active'}">${m.status === 'active' ? '活跃' : m.status === 'frozen' ? '冻结' : '过期'}</span></td>
+                  <td><span class="badge ${m.status || 'active'}">${statusMap[m.status] || m.status || '-'}</span></td>
                   <td>${m.plan || '-'}</td>
                   <td>${m.created_at ? new Date(m.created_at).toLocaleString('zh-CN') : '-'}</td>
                   <td>
@@ -275,6 +277,7 @@ async function deleteMerchant(id) {
   if (!confirm('确定要删除该商户吗？此操作不可撤销。')) return
   try {
     await api(`/api/merchants/${id}`, { method: 'DELETE' })
+    alert('商户已删除')
     renderMerchants()
   } catch (e) {
     alert('删除失败: ' + e.message)

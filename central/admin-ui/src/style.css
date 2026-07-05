@@ -188,6 +188,14 @@ body {
 .stat-card {
   background: var(--card-bg);
   border-radius: var(--radius);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
   box-shadow: var(--shadow);
   padding: 20px;
   text-align: center;

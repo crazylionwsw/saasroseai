@@ -115,23 +115,28 @@ router.post('/api/merchants', async (request: Request, env: Env): Promise<Respon
   return handleCreateMerchant(request, env)
 })
 
-router.get('/api/merchants/:merchantId', handleGetMerchant)
+router.get('/api/merchants/:merchantId', (request: Request, env: Env) => {
+  return handleGetMerchant(request, env, (request as any).params.merchantId)
+})
 
-router.put('/api/merchants/:merchantId', async (request: Request, env: Env, merchantId: string): Promise<Response> => {
+router.put('/api/merchants/:merchantId', async (request: Request, env: Env): Promise<Response> => {
+  const merchantId = (request as any).params.merchantId
   const ip = getClientIP(request)
   const rl = checkRateLimit(ip, 'sensitive')
   if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
   return handleUpdateMerchant(request, env, merchantId)
 })
 
-router.delete('/api/merchants/:merchantId', async (request: Request, env: Env, merchantId: string): Promise<Response> => {
+router.delete('/api/merchants/:merchantId', async (request: Request, env: Env): Promise<Response> => {
+  const merchantId = (request as any).params.merchantId
   const ip = getClientIP(request)
   const rl = checkRateLimit(ip, 'sensitive')
   if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
   return handleDeleteMerchant(request, env, merchantId)
 })
 
-router.post('/api/merchants/:merchantId/token', async (request: Request, env: Env, merchantId: string): Promise<Response> => {
+router.post('/api/merchants/:merchantId/token', async (request: Request, env: Env): Promise<Response> => {
+  const merchantId = (request as any).params.merchantId
   const ip = getClientIP(request)
   const rl = checkRateLimit(ip, 'sensitive')
   if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
@@ -141,16 +146,20 @@ router.post('/api/merchants/:merchantId/token', async (request: Request, env: En
 router.post('/api/merchants/verify', handleVerifyMerchant)
 
 // ── Deployments ──
-router.get('/api/merchants/:merchantId/deployments', handleListDeployments)
+router.get('/api/merchants/:merchantId/deployments', (request: Request, env: Env) => {
+  return handleListDeployments(request, env, (request as any).params.merchantId)
+})
 
-router.post('/api/merchants/:merchantId/deployments', async (request: Request, env: Env, merchantId: string): Promise<Response> => {
+router.post('/api/merchants/:merchantId/deployments', async (request: Request, env: Env): Promise<Response> => {
+  const merchantId = (request as any).params.merchantId
   const ip = getClientIP(request)
   const rl = checkRateLimit(ip, 'sensitive')
   if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
   return handleCreateDeployment(request, env, merchantId)
 })
 
-router.put('/api/deployments/:deploymentId', async (request: Request, env: Env, deploymentId: string): Promise<Response> => {
+router.put('/api/deployments/:deploymentId', async (request: Request, env: Env): Promise<Response> => {
+  const deploymentId = (request as any).params.deploymentId
   const ip = getClientIP(request)
   const rl = checkRateLimit(ip, 'sensitive')
   if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
@@ -165,7 +174,9 @@ router.post('/api/templates/scrape', async (request: Request, env: Env): Promise
   return handleScrapeWebsite(request, env)
 })
 
-router.get('/api/templates/scrape/:jobId', handleGetScrapeJob)
+router.get('/api/templates/scrape/:jobId', (request: Request, env: Env) => {
+  return handleGetScrapeJob(request, env, (request as any).params.jobId)
+})
 router.get('/api/templates/scrape-jobs', handleListScrapeJobs)
 
 // ── Health ──
