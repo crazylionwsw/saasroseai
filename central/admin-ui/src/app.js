@@ -1,4 +1,4 @@
-const API_BASE = localStorage.getItem('api_base') || 'https://rose-saas-central-api.touchwant.workers.dev'
+const API_BASE = 'https://rose-saas-central-api.touchwant.workers.dev'
 
 function getToken() {
   return localStorage.getItem('admin_token')
@@ -39,7 +39,8 @@ function isSessionValid() {
 
 function navigate(page, params) {
   document.querySelectorAll('.menu-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.page === page)
+    const targetPage = page === 'merchant-detail' ? 'merchants' : page
+    el.classList.toggle('active', el.dataset.page === targetPage)
   })
   switch (page) {
     case 'dashboard': renderDashboard(); break
@@ -106,7 +107,7 @@ async function renderDashboard() {
         </div>
       </div>
       <div class="quick-actions">
-        <button class="btn btn-primary" onclick="navigate('merchants')">➕ 新增商户</button>
+        <button class="btn btn-primary" onclick="showMerchantForm(null)">➕ 新增商户</button>
         <button class="btn btn-secondary" onclick="navigate('settings')">📋 系统设置</button>
       </div>
     `
@@ -153,7 +154,7 @@ async function renderMerchants() {
             <tbody id="merchant-table-body">
               ${merchants.map(m => `
                 <tr data-name="${(m.name || '').toLowerCase()}" data-subdomain="${(m.subdomain || '').toLowerCase()}" data-status="${m.status || ''}">
-                  <td><a href="#" onclick="event.preventDefault();navigate('merchant-detail',{id:'${m.id}'})" style="color:var(--primary);text-decoration:none;font-weight:500;">${m.name || '-'}</a></td>
+                  <td><a href="#" onclick="event.preventDefault();navigate('merchant-detail',{id:'${m.id}'})" style="color:var(--primary);text-decoration:none;font-weight:500;">${escHtml(m.name) || '-'}</a></td>
                   <td>${m.subdomain || '-'}</td>
                   <td><span class="badge ${m.status || 'active'}">${statusMap[m.status] || m.status || '-'}</span></td>
                   <td>${m.plan || '-'}</td>
@@ -187,7 +188,7 @@ function filterMerchants() {
 }
 
 async function showMerchantForm(id) {
-  let merchant = { name: '', subdomain: '', plan: 'basic', status: 'active' }
+  let merchant = { name: '', subdomain: '', plan: 'basic', status: 'active', phone: '', email: '', theme_color: '#4F46E5', notes: '', templateId: 'classic' }
   if (id) {
     try {
       const data = await api(`/api/merchants/${id}`)
@@ -197,6 +198,17 @@ async function showMerchantForm(id) {
       return
     }
   }
+
+  let templates = [{ id: 'classic', name: 'Classic', built_in: true }]
+  try {
+    const tplData = await api('/api/templates')
+    templates = tplData.templates ?? templates
+  } catch {}
+
+  const templateOptions = templates.map(t =>
+    `<option value="${escHtml(t.id)}" ${(merchant.templateId || 'classic') === t.id ? 'selected' : ''}>${escHtml(t.name)}${t.built_in ? '' : ' 🏗️'}</option>`
+  ).join('')
+
   showModal(`
     <div class="modal-header">
       <h3>${id ? '编辑商户' : '新增商户'}</h3>
@@ -207,7 +219,16 @@ async function showMerchantForm(id) {
         <label>商户名称</label>
         <input type="text" class="form-control" name="name" value="${escHtml(merchant.name)}" required>
       </div>
-      <input type="hidden" name="templateId" value="classic">
+      <div class="form-row">
+        <div class="form-group">
+          <label>手机号</label>
+          <input type="tel" class="form-control" name="phone" value="${escHtml(merchant.phone || '')}" placeholder="选填">
+        </div>
+        <div class="form-group">
+          <label>邮箱</label>
+          <input type="email" class="form-control" name="email" value="${escHtml(merchant.email || '')}" placeholder="选填">
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>套餐</label>
@@ -225,6 +246,20 @@ async function showMerchantForm(id) {
             <option value="expired" ${merchant.status === 'expired' ? 'selected' : ''}>过期</option>
           </select>
         </div>
+        <div class="form-group" style="flex:0.5;">
+          <label>主题色</label>
+          <input type="color" class="form-control" name="theme_color" value="${merchant.theme_color || '#4F46E5'}" style="height:38px;padding:4px;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>网站模板</label>
+        <select class="form-control" name="templateId">
+          ${templateOptions}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>备注</label>
+        <textarea class="form-control" name="notes" rows="2" placeholder="选填">${escHtml(merchant.notes || '')}</textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
@@ -256,7 +291,7 @@ async function saveMerchant(e) {
 async function deployMerchant(id) {
   if (!confirm('确定要部署该商户吗？')) return
   try {
-    const version = 'v' + new Date().toISOString().slice(0, 10)
+    const version = new Date().toISOString().replace(/[:.]/g, '-')
     await api(`/api/merchants/${id}/deployments`, { method: 'POST', body: JSON.stringify({ version }) })
     alert('部署已触发')
     renderMerchants()
@@ -309,6 +344,7 @@ async function renderMerchantDetail(id) {
           <div class="info-item"><label>名称</label><span>${escHtml(m.name) || '-'}</span></div>
           <div class="info-item"><label>子域名</label><span>${escHtml(m.subdomain) || '-'}</span></div>
           <div class="info-item"><label>套餐</label><span>${m.plan || '-'}</span></div>
+          <div class="info-item"><label>模板</label><span><code>${escHtml(m.templateId || m.template_id || 'classic')}</code></span></div>
           <div class="info-item"><label>创建时间</label><span>${m.created_at ? new Date(m.created_at).toLocaleString('zh-CN') : '-'}</span></div>
         </div>
       </div>
@@ -426,15 +462,41 @@ function scrapeWebsite() {
 async function startScrape(url) {
   const statusEl = document.getElementById('scrape-status')
   statusEl.style.display = 'block'
-  statusEl.innerHTML = '<div class="loading">正在提交采集任务...</div>'
+  statusEl.innerHTML = '<div class="loading">正在采集网站，请稍候...</div>'
 
   try {
     const data = await api('/api/templates/scrape', {
       method: 'POST',
       body: JSON.stringify({ url }),
     })
-    const jobId = data.jobId
-    pollScrapeJob(jobId)
+
+    if (data.jobId) {
+      pollScrapeJob(data.jobId)
+    } else if (data.success) {
+      const itemCount = data.menuItems ? data.menuItems.length : 0
+      statusEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;padding:8px;">
+          <span style="font-size:24px;">✅</span>
+          <div>
+            <strong>采集完成!</strong>
+            <p style="margin:4px 0 0;color:#666;font-size:13px;">
+              餐厅: <strong>${escHtml(data.name)}</strong>
+            </p>
+            <p style="margin:2px 0 0;color:#666;font-size:13px;">
+              电话: ${escHtml(data.phone || '—')} · 邮箱: ${escHtml(data.email || '—')} · 菜品: ${itemCount}
+            </p>
+            <p style="margin:2px 0 0;color:#666;font-size:13px;">
+              模板已生成: <code>${data.templateId}</code>
+            </p>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="this.closest('#scrape-status').style.display='none';renderTemplates()" style="margin-left:auto;">
+            刷新模板列表
+          </button>
+        </div>
+      `
+    } else {
+      statusEl.innerHTML = `<div class="empty-state"><p>❌ 采集失败: 未知错误</p></div>`
+    }
   } catch (e) {
     statusEl.innerHTML = `<div class="empty-state"><p>❌ 提交失败: ${e.message}</p></div>`
   }
@@ -478,13 +540,10 @@ async function pollScrapeJob(jobId) {
         </div>
       `
     } else {
-      const statusText = job.status === 'scraping' ? '⏳ 正在抓取页面...'
-        : job.status === 'analyzing' ? '🔍 AI 正在分析内容...'
-        : job.status === 'generating' ? '⚙️ 正在生成模板文件...'
-        : '⏳ 处理中...'
+      const statusText = '⏳ 处理中...'
       statusEl.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;padding:8px;">
-          <div class="spinner" style="width:20px;height:20px;border:2px solid #ddd;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+          <div style="width:20px;height:20px;border:2px solid #ddd;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
           <div>
             <strong>${statusText}</strong>
             <p style="margin:4px 0 0;color:#666;font-size:13px;">${escHtml(job.progress || '')}</p>

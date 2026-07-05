@@ -3,7 +3,7 @@ import type { Env } from './types'
 import { generateAdminToken, verifyAdminToken } from './auth'
 import { handleListMerchants, handleGetMerchant, handleCreateMerchant, handleUpdateMerchant, handleDeleteMerchant, handleVerifyMerchant, handleRegenerateToken } from './merchants'
 import { handleListDeployments, handleCreateDeployment, handleUpdateDeployment } from './deployments'
-import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs } from './template-scraper'
+import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs, handleGetTemplateFile, handleListTemplates, handleSeedBuiltInTemplates } from './template-scraper'
 import {
   timingSafeEqual, checkRateLimit, validateMerchantInput,
   sanitizeError, getClientIP, logAudit, cleanupRateLimitStore,
@@ -178,6 +178,10 @@ router.get('/api/templates/scrape/:jobId', (request: Request, env: Env) => {
   return handleGetScrapeJob(request, env, (request as any).params.jobId)
 })
 router.get('/api/templates/scrape-jobs', handleListScrapeJobs)
+router.get('/api/templates/scrape/:templateId/file', (request: Request, env: Env) => {
+  return handleGetTemplateFile(request, env, (request as any).params.templateId)
+})
+router.get('/api/templates', handleListTemplates)
 
 // ── Health ──
 router.get('/api/health', () => jsonResponse({ status: 'ok' }))
@@ -185,8 +189,8 @@ router.get('/api/health', () => jsonResponse({ status: 'ok' }))
 // ── Main fetch ──
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // Periodic rate limit cleanup
     cleanupRateLimitStore()
+    ctx.waitUntil(handleSeedBuiltInTemplates(env))
 
     // JWT session verification for non-public, non-master-token requests
     const url = new URL(request.url)

@@ -103,6 +103,10 @@ export async function handleUpdateMerchant(request: Request, env: Env, merchantI
       return errorResponse(validation.errors.join('; '), 400)
     }
 
+    if (body.templateId !== undefined && body.template_id === undefined) {
+      body.template_id = body.templateId
+    }
+
     const updates: string[] = []
     const values: any[] = []
     for (const key of getAllowedColumns()) {
