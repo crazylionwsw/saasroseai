@@ -164,6 +164,7 @@ async function renderMerchants() {
                   <td>
                     <button class="btn btn-sm btn-secondary" onclick="showMerchantForm('${m.id}')">编辑</button>
                     <button class="btn btn-sm btn-success" onclick="deployMerchant('${m.id}')">部署</button>
+                    <button class="btn btn-sm btn-accent" onclick="deployToMerchantCF('${m.id}')">CF 部署</button>
                     <button class="btn btn-sm ${m.status === 'frozen' ? 'btn-success' : 'btn-warning'}" onclick="toggleFreezeMerchant('${m.id}','${m.status}')">${m.status === 'frozen' ? '激活' : '冻结'}</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteMerchant('${m.id}')">删除</button>
                   </td>
@@ -260,6 +261,18 @@ async function showMerchantForm(id) {
         </select>
       </div>
       <div class="form-group">
+        <label>Cloudflare Account ID</label>
+        <input type="text" class="form-control" name="cfAccountId" value="${escHtml(merchant.cfAccountId || merchant.cf_account_id || '')}" placeholder="选填">
+      </div>
+      <div class="form-group">
+        <label>Cloudflare API Token</label>
+        <div style="display:flex;gap:8px;">
+          <input type="password" class="form-control" name="cfApiToken" value="${escHtml(merchant.cfApiToken || merchant.cf_api_token || '')}" placeholder="选填" style="flex:1;" id="cf-token-input">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="const inp=document.getElementById('cf-token-input');inp.type=inp.type==='password'?'text':'password';this.textContent=inp.type==='password'?'显示':'隐藏'" style="white-space:nowrap;">显示</button>
+        </div>
+        <small style="color:#999;font-size:12px;">用于直接部署商户站点到其 Cloudflare Pages</small>
+      </div>
+      <div class="form-group">
         <label>备注</label>
         <textarea class="form-control" name="notes" rows="2" placeholder="选填">${escHtml(merchant.notes || '')}</textarea>
       </div>
@@ -299,6 +312,29 @@ async function deployMerchant(id) {
     renderMerchants()
   } catch (e) {
     alert('部署失败: ' + e.message)
+  }
+}
+
+async function deployToMerchantCF(id) {
+  if (!confirm('确定要使用商户的 Cloudflare API Token 直接部署站点吗？')) return
+  const statusEl = document.getElementById('cf-deploy-status')
+  const btn = document.getElementById('cf-deploy-btn')
+  if (btn) btn.disabled = true
+  if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = '部署中...' }
+  try {
+    const data = await api(`/api/merchants/${id}/deploy-cf`, { method: 'POST' })
+    if (statusEl) {
+      statusEl.innerHTML = data.success
+        ? `✅ 部署成功！<a href="${escHtml(data.pagesUrl)}" target="_blank" rel="noopener" style="color:var(--primary);">访问站点 ↗</a>`
+        : `❌ 部署失败`
+    }
+    if (data.success) {
+      renderMerchants()
+    }
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `❌ ${escHtml(e.message)}`
+  } finally {
+    if (btn) btn.disabled = false
   }
 }
 
@@ -356,6 +392,17 @@ async function renderMerchantDetail(id) {
           <span class="token-masked" id="token-display">${m.token ? m.token.substring(0, 8) + '****' : '未生成'}</span>
           <button class="btn btn-sm btn-secondary" onclick="revealToken('${id}')">显示</button>
           <button class="btn btn-sm btn-primary" onclick="regenerateToken('${id}')">重新生成</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cloudflare 部署</div>
+        <div class="info-grid">
+          <div class="info-item"><label>Account ID</label><span>${escHtml(m.cfAccountId || m.cf_account_id || '—')}</span></div>
+          <div class="info-item"><label>API Token</label><span>${m.cf_has_token ? '已配置' : '未配置'}</span></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn btn-accent" onclick="deployToMerchantCF('${id}')" id="cf-deploy-btn">🚀 CF 部署</button>
+          <span id="cf-deploy-status" style="display:none;align-self:center;font-size:13px;color:#666;"></span>
         </div>
       </div>
       <div class="card">

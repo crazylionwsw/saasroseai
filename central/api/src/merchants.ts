@@ -19,7 +19,25 @@ function errorResponse(error: string, code: number): Response {
 const MERCHANT_SAFE_COLUMNS = [
   'id', 'name', 'email', 'phone', 'status', 'plan', 'template_id',
   'subdomain', 'theme_color', 'notes', 'created_at', 'expires_at',
+  'cf_account_id', 'cf_api_token',
 ]
+
+function maskMerchant(merchant: Record<string, any>): Record<string, any> {
+  if (merchant.cf_api_token) {
+    const t = merchant.cf_api_token as string
+    merchant.cf_api_token = t.length > 8
+      ? t.slice(0, 4) + '****' + t.slice(-4)
+      : '****'
+    merchant.cf_has_token = true
+  } else {
+    merchant.cf_has_token = false
+  }
+  return merchant
+}
+
+function maskMerchants(results: any[]): any[] {
+  return results.map(r => maskMerchant(r))
+}
 
 export async function handleListMerchants(request: Request, env: Env): Promise<Response> {
   try {
@@ -38,7 +56,7 @@ export async function handleListMerchants(request: Request, env: Env): Promise<R
     sql += ' ORDER BY created_at DESC'
     const stmt = env.CENTRAL_DB.prepare(sql)
     const { results } = params.length > 0 ? await stmt.bind(...params).all() : await stmt.all()
-    return jsonResponse({ merchants: results })
+    return jsonResponse({ merchants: maskMerchants(results as any[]) })
   } catch (e) {
     return errorResponse(sanitizeError(e), 500)
   }
@@ -54,7 +72,7 @@ export async function handleGetMerchant(request: Request, env: Env, merchantId: 
       `SELECT ${allowedCols} FROM merchants WHERE id = ?`
     ).bind(merchantId).first()
     if (!merchant) return errorResponse('Merchant not found', 404)
-    return jsonResponse(merchant)
+    return jsonResponse(maskMerchant(merchant as Record<string, any>))
   } catch (e) {
     return errorResponse(sanitizeError(e), 500)
   }
@@ -77,9 +95,11 @@ export async function handleCreateMerchant(request: Request, env: Env): Promise<
     const safeName = name.trim().slice(0, 50)
     const safePlan = ['basic', 'pro', 'enterprise'].includes(plan) ? plan : 'basic'
     const safeTemplate = templateId || 'classic'
+    const cfAccountId = body.cfAccountId || body.cf_account_id || null
+    const cfApiToken = body.cfApiToken || body.cf_api_token || null
     await env.CENTRAL_DB.prepare(
-      'INSERT INTO merchants (id, name, email, phone, plan, template_id, subdomain, theme_color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, safeName, email || null, phone || null, safePlan, safeTemplate, subdomain, '#4F46E5', createdAt).run()
+      'INSERT INTO merchants (id, name, email, phone, plan, template_id, subdomain, theme_color, created_at, cf_account_id, cf_api_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, safeName, email || null, phone || null, safePlan, safeTemplate, subdomain, '#4F46E5', createdAt, cfAccountId, cfApiToken).run()
     const allowedCols = MERCHANT_SAFE_COLUMNS.join(', ')
     const merchant = await env.CENTRAL_DB.prepare(`SELECT ${allowedCols} FROM merchants WHERE id = ?`).bind(id).first()
     await logAudit(env, 'MERCHANT_CREATE', 'merchant', id, `Created merchant: ${safeName}`, getClientIP(request))
@@ -105,6 +125,9 @@ export async function handleUpdateMerchant(request: Request, env: Env, merchantI
 
     if (body.templateId !== undefined && body.template_id === undefined) {
       body.template_id = body.templateId
+    }
+    if (body.cfApiToken !== undefined && body.cf_api_token === undefined) {
+      body.cf_api_token = body.cfApiToken
     }
 
     const updates: string[] = []

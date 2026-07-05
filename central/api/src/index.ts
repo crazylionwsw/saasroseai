@@ -4,6 +4,7 @@ import { generateAdminToken, verifyAdminToken } from './auth'
 import { handleListMerchants, handleGetMerchant, handleCreateMerchant, handleUpdateMerchant, handleDeleteMerchant, handleVerifyMerchant, handleRegenerateToken } from './merchants'
 import { handleListDeployments, handleCreateDeployment, handleUpdateDeployment } from './deployments'
 import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs, handleGetTemplateFile, handleListTemplates, handleSeedBuiltInTemplates } from './template-scraper'
+import { handleDeployToMerchantCF } from './cf-deploy'
 import {
   timingSafeEqual, checkRateLimit, validateMerchantInput,
   sanitizeError, getClientIP, logAudit, cleanupRateLimitStore,
@@ -144,6 +145,15 @@ router.post('/api/merchants/:merchantId/token', async (request: Request, env: En
 })
 
 router.post('/api/merchants/verify', handleVerifyMerchant)
+
+// ── Direct deploy to merchant CF ──
+router.post('/api/merchants/:merchantId/deploy-cf', async (request: Request, env: Env): Promise<Response> => {
+  const merchantId = (request as any).params.merchantId
+  const ip = getClientIP(request)
+  const rl = checkRateLimit(ip, 'sensitive')
+  if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
+  return handleDeployToMerchantCF(request, env, merchantId)
+})
 
 // ── Deployments ──
 router.get('/api/merchants/:merchantId/deployments', (request: Request, env: Env) => {

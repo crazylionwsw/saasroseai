@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS merchants (
   plan TEXT DEFAULT 'basic' CHECK(plan IN ('basic','pro','enterprise')),
   cf_account_email TEXT,
   cf_account_id TEXT,
+  cf_api_token TEXT,
   subdomain TEXT UNIQUE,
   template_id TEXT DEFAULT 'classic',
   theme_color TEXT DEFAULT '#8B0000',
