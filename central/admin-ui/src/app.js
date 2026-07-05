@@ -424,12 +424,58 @@ async function renderTemplates() {
     </div>
     <div class="card" id="scrape-status" style="display:none;margin-bottom:16px;"></div>
     <div class="card">
-      <div class="empty-state" style="padding:40px;">
-        <p>模板通过网站采集功能创建，暂无独立的模板 CRUD 管理页面。</p>
-        <p style="margin-top:8px;color:#666;font-size:14px;">点击「采集网站」按钮从餐厅官网抓取并生成模板。</p>
+      <div class="loading" id="tpl-loading">加载模板列表...</div>
+      <div class="table-container" id="tpl-table-container" style="display:none;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>名称</th>
+              <th>说明</th>
+              <th>类型</th>
+              <th>状态</th>
+              <th>创建时间</th>
+            </tr>
+          </thead>
+          <tbody id="tpl-table-body"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="tpl-empty" style="display:none;padding:40px;">
+        <p>暂无自定义模板，点击「采集网站」从餐厅官网抓取并生成模板。</p>
       </div>
     </div>
   `
+  try {
+    const data = await api('/api/templates')
+    const templates = data.templates ?? []
+    const loadingEl = document.getElementById('tpl-loading')
+    const tableContainer = document.getElementById('tpl-table-container')
+    const tableBody = document.getElementById('tpl-table-body')
+    const emptyEl = document.getElementById('tpl-empty')
+    loadingEl.style.display = 'none'
+    if (templates.length === 0) {
+      emptyEl.style.display = 'block'
+      return
+    }
+    tableContainer.style.display = 'block'
+    tableBody.innerHTML = templates.map(t => {
+      const isBuiltIn = t.built_in || t.id === 'classic' || t.id === 'modern'
+      const typeLabel = isBuiltIn ? '<span class="badge active">内置</span>' : '<span class="badge frozen">采集</span>'
+      const statusLabel = t.is_active ? '<span class="badge active">启用</span>' : '<span class="badge expired">停用</span>'
+      const createdAt = t.created_at ? new Date(t.created_at).toLocaleString('zh-CN') : '-'
+      const desc = escHtml(t.description || '').slice(0, 60)
+      return `<tr>
+        <td><code style="font-size:12px;">${escHtml(t.id)}</code></td>
+        <td><strong>${escHtml(t.name || t.id)}</strong></td>
+        <td style="color:var(--text-light);font-size:13px;">${desc}${(t.description || '').length > 60 ? '...' : ''}</td>
+        <td>${typeLabel}</td>
+        <td>${statusLabel}</td>
+        <td style="font-size:12px;color:var(--text-light);">${createdAt}</td>
+      </tr>`
+    }).join('')
+  } catch (e) {
+    document.getElementById('tpl-loading').innerHTML = `<span style="color:var(--red);">❌ 加载失败: ${e.message}</span>`
+  }
 }
 
 // === Template Scraper ===
