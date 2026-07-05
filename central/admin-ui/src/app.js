@@ -155,7 +155,9 @@ async function renderMerchants() {
               ${merchants.map(m => `
                 <tr data-name="${(m.name || '').toLowerCase()}" data-subdomain="${(m.subdomain || '').toLowerCase()}" data-status="${m.status || ''}">
                   <td><a href="#" onclick="event.preventDefault();navigate('merchant-detail',{id:'${m.id}'})" style="color:var(--primary);text-decoration:none;font-weight:500;">${escHtml(m.name) || '-'}</a></td>
-                  <td>${m.subdomain || '-'}</td>
+                  <td>
+                    ${m.subdomain ? `<a href="https://storefront-${escHtml(m.id)}.pages.dev" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:none;">${escHtml(m.subdomain)} ↗</a>` : '-'}
+                  </td>
                   <td><span class="badge ${m.status || 'active'}">${statusMap[m.status] || m.status || '-'}</span></td>
                   <td>${m.plan || '-'}</td>
                   <td>${m.created_at ? new Date(m.created_at).toLocaleString('zh-CN') : '-'}</td>
@@ -342,7 +344,7 @@ async function renderMerchantDetail(id) {
         <div class="info-grid">
           <div class="info-item"><label>ID</label><span>${m.id || '-'}</span></div>
           <div class="info-item"><label>名称</label><span>${escHtml(m.name) || '-'}</span></div>
-          <div class="info-item"><label>子域名</label><span>${escHtml(m.subdomain) || '-'}</span></div>
+          <div class="info-item"><label>子域名</label><span>${escHtml(m.subdomain) || '-'}${m.id ? ` <a href="https://storefront-${escHtml(m.id)}.pages.dev" target="_blank" rel="noopener" style="color:var(--primary);font-size:13px;">访问站点 ↗</a>` : ''}</span></div>
           <div class="info-item"><label>套餐</label><span>${m.plan || '-'}</span></div>
           <div class="info-item"><label>模板</label><span><code>${escHtml(m.templateId || m.template_id || 'classic')}</code></span></div>
           <div class="info-item"><label>创建时间</label><span>${m.created_at ? new Date(m.created_at).toLocaleString('zh-CN') : '-'}</span></div>
