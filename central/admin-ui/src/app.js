@@ -18,7 +18,12 @@ async function api(path, options = {}) {
     alert('登录已过期，请重新登录')
     window.location.reload()
   }
-  if (!resp.ok) throw new Error(await resp.text())
+  if (!resp.ok) {
+    const text = await resp.text()
+    let msg = resp.statusText
+    try { const j = JSON.parse(text); msg = j.error || msg } catch {}
+    throw new Error(msg)
+  }
   return resp.json()
 }
 
@@ -202,10 +207,7 @@ async function showMerchantForm(id) {
         <label>商户名称</label>
         <input type="text" class="form-control" name="name" value="${escHtml(merchant.name)}" required>
       </div>
-      <div class="form-group">
-        <label>子域名</label>
-        <input type="text" class="form-control" name="subdomain" value="${escHtml(merchant.subdomain)}" required>
-      </div>
+      <input type="hidden" name="templateId" value="classic">
       <div class="form-row">
         <div class="form-group">
           <label>套餐</label>
@@ -254,7 +256,8 @@ async function saveMerchant(e) {
 async function deployMerchant(id) {
   if (!confirm('确定要部署该商户吗？')) return
   try {
-    await api(`/api/merchants/${id}/deployments`, { method: 'POST' })
+    const version = 'v' + new Date().toISOString().slice(0, 10)
+    await api(`/api/merchants/${id}/deployments`, { method: 'POST', body: JSON.stringify({ version }) })
     alert('部署已触发')
     renderMerchants()
   } catch (e) {
@@ -292,12 +295,12 @@ async function renderMerchantDetail(id) {
     const data = await api(`/api/merchants/${id}`)
     const m = data.merchant ?? data
     const deploys = await api(`/api/merchants/${id}/deployments`)
-    const deployRecords = deploys.records ?? deploys ?? []
+    const deployRecords = deploys.deployments ?? deploys ?? []
     main.innerHTML = `
       <div class="detail-header">
         <button class="back-btn" onclick="navigate('merchants')">←</button>
         <h2>${escHtml(m.name)}</h2>
-        <span class="badge ${m.status || 'active'}">${m.status === 'active' ? '活跃' : m.status === 'frozen' ? '冻结' : '过期'}</span>
+        <span class="badge ${m.status || 'active'}">${({ active: '活跃', frozen: '冻结', expired: '过期' })[m.status] || m.status || '-'}</span>
       </div>
       <div class="card">
         <div class="card-title">基本信息</div>
@@ -336,7 +339,7 @@ async function renderMerchantDetail(id) {
                   <td>${d.version || '-'}</td>
                   <td><span class="badge ${d.status === 'success' ? 'active' : d.status === 'running' ? 'frozen' : 'expired'}">${d.status || '-'}</span></td>
                   <td>${d.created_at ? new Date(d.created_at).toLocaleString('zh-CN') : '-'}</td>
-                  <td>${d.finished_at ? new Date(d.finished_at).toLocaleString('zh-CN') : '-'}</td>
+                   <td>${d.completed_at ? new Date(d.completed_at).toLocaleString('zh-CN') : '-'}</td>
                   <td>${d.log ? `<button class="btn btn-sm btn-outline" onclick="alert('${escHtml(d.log)}')">查看日志</button>` : '-'}</td>
                 </tr>
               `).join('') : '<tr><td colspan="5" style="text-align:center;color:#b2bec3;">暂无部署记录</td></tr>'}
@@ -352,7 +355,7 @@ async function renderMerchantDetail(id) {
 
 async function revealToken(id) {
   try {
-    const data = await api(`/api/merchants/${id}/token`)
+    const data = await api(`/api/merchants/${id}/token`, { method: 'POST' })
     const token = data.token ?? ''
     document.getElementById('token-display').textContent = token
   } catch (e) {
@@ -594,7 +597,7 @@ async function resetToken() {
   showTokenModal('重新登录', async (adminToken, days) => {
     try {
       await login(adminToken, days)
-      document.getElementById('token-status').textContent = '已设置'
+      document.getElementById('token-status').textContent = '✅ 已登录'
       const exp = getSessionExpiry()
       const d = exp ? Math.round((new Date(exp) - Date.now()) / 86400000) : '?'
       alert(`重新登录成功！会话有效期 ${d} 天`)

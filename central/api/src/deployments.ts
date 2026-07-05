@@ -48,12 +48,12 @@ export async function handleCreateDeployment(request: Request, env: Env, merchan
     }
     const body = await request.json() as Record<string, any>
     const { version, templateVersion, deployedBy } = body
-    if (!version || typeof version !== 'string') return errorResponse('version is required', 400)
+    const safeVersion = (version || new Date().toISOString().replace(/[:.]/g, '-')).slice(0, 50)
     const id = 'd-' + crypto.randomUUID().slice(0, 8)
     const startedAt = new Date().toISOString()
     await env.CENTRAL_DB.prepare(
       'INSERT INTO deployments (id, merchant_id, version, template_version, status, started_at, deployed_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, merchantId, version.slice(0, 50), (templateVersion || '').slice(0, 50), 'pending', startedAt, (deployedBy || '').slice(0, 100) || null).run()
+    ).bind(id, merchantId, safeVersion, (templateVersion || '').slice(0, 50), 'pending', startedAt, (deployedBy || '').slice(0, 100) || null).run()
     const cols = DEPLOYMENT_SAFE_COLUMNS.join(', ')
     const deployment = await env.CENTRAL_DB.prepare(`SELECT ${cols} FROM deployments WHERE id = ?`).bind(id).first()
     await logAudit(env, 'DEPLOYMENT_CREATE', 'deployment', id,

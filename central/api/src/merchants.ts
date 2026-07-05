@@ -64,7 +64,7 @@ export async function handleCreateMerchant(request: Request, env: Env): Promise<
   try {
     const body = await request.json() as Record<string, any>
     const { name, email, phone, plan, templateId } = body
-    if (!name || !templateId) return errorResponse('name and templateId are required', 400)
+    if (!name) return errorResponse('name is required', 400)
 
     const validation = validateMerchantInput(body)
     if (!validation.valid) {
@@ -76,9 +76,10 @@ export async function handleCreateMerchant(request: Request, env: Env): Promise<
     const createdAt = new Date().toISOString()
     const safeName = name.trim().slice(0, 50)
     const safePlan = ['basic', 'pro', 'enterprise'].includes(plan) ? plan : 'basic'
+    const safeTemplate = templateId || 'classic'
     await env.CENTRAL_DB.prepare(
       'INSERT INTO merchants (id, name, email, phone, plan, template_id, subdomain, theme_color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, safeName, email || null, phone || null, safePlan, templateId, subdomain, '#4F46E5', createdAt).run()
+    ).bind(id, safeName, email || null, phone || null, safePlan, safeTemplate, subdomain, '#4F46E5', createdAt).run()
     const allowedCols = MERCHANT_SAFE_COLUMNS.join(', ')
     const merchant = await env.CENTRAL_DB.prepare(`SELECT ${allowedCols} FROM merchants WHERE id = ?`).bind(id).first()
     await logAudit(env, 'MERCHANT_CREATE', 'merchant', id, `Created merchant: ${safeName}`, getClientIP(request))
