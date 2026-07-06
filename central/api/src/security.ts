@@ -65,7 +65,7 @@ export function cleanupRateLimitStore(): void {
 }
 
 // ── Input validation ──
-const PHONE_REGEX = /^1[3-9]\d{9}$/
+const PHONE_REGEX = /^[+\d][\d\s\-().]{6,20}$/
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export interface ValidationResult {
