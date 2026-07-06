@@ -103,7 +103,7 @@ export async function handleCreateMerchant(request: Request, env: Env): Promise<
     const allowedCols = MERCHANT_SAFE_COLUMNS.join(', ')
     const merchant = await env.CENTRAL_DB.prepare(`SELECT ${allowedCols} FROM merchants WHERE id = ?`).bind(id).first()
     await logAudit(env, 'MERCHANT_CREATE', 'merchant', id, `Created merchant: ${safeName}`, getClientIP(request))
-    return jsonResponse(merchant, 201)
+    return jsonResponse(maskMerchant(merchant as Record<string, any>), 201)
   } catch (e) {
     return errorResponse(sanitizeError(e), 500)
   }
@@ -128,6 +128,9 @@ export async function handleUpdateMerchant(request: Request, env: Env, merchantI
     }
     if (body.cfApiToken !== undefined && body.cf_api_token === undefined) {
       body.cf_api_token = body.cfApiToken
+    }
+    if (body.cfAccountId !== undefined && body.cf_account_id === undefined) {
+      body.cf_account_id = body.cfAccountId
     }
 
     const updates: string[] = []
@@ -154,7 +157,7 @@ export async function handleUpdateMerchant(request: Request, env: Env, merchantI
     const merchant = await env.CENTRAL_DB.prepare(`SELECT ${allowedCols} FROM merchants WHERE id = ?`).bind(merchantId).first()
     await logAudit(env, 'MERCHANT_UPDATE', 'merchant', merchantId,
       `Updated: ${updates.join(', ')}`, getClientIP(request))
-    return jsonResponse(merchant)
+    return jsonResponse(maskMerchant(merchant as Record<string, any>))
   } catch (e) {
     return errorResponse(sanitizeError(e), 500)
   }
