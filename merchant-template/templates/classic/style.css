@@ -101,6 +101,19 @@ ul { list-style: none; }
 
 .nav a:hover { color: var(--accent); }
 
+.lang-switch select {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  font-family: var(--font);
+  cursor: pointer;
+  outline: none;
+}
+.lang-switch select option { color: var(--text); background: #fff; }
+
 .hamburger {
   display: none;
   flex-direction: column;

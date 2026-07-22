@@ -90,6 +90,20 @@ ul { list-style: none; }
   color: var(--primary);
 }
 
+.lang-switch select {
+  background: transparent;
+  color: var(--text-light);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  font-family: var(--font);
+  cursor: pointer;
+  outline: none;
+}
+.lang-switch select:focus { border-color: var(--primary); }
+.lang-switch select option { color: var(--text); }
+
 .hamburger {
   display: none;
   flex-direction: column;

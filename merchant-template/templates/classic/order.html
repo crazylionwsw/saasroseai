@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{LANG}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{RESTAURANT_NAME}} - 在线下单</title>
+  <title>{{RESTAURANT_NAME}} - {{T:page_title_order}}</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,38 +13,45 @@
         <img src="{{LOGO_URL}}" alt="{{RESTAURANT_NAME}}">
         <h1>{{RESTAURANT_NAME}}</h1>
       </div>
-      <button class="hamburger" aria-label="菜单">
+      <button class="hamburger" aria-label="{{T:nav_menu}}">
         <span></span><span></span><span></span>
       </button>
       <nav class="nav">
-        <a href="index.html">首页</a>
-        <a href="menu.html">菜单</a>
-        <a href="order.html" class="active">下单</a>
-        <a href="contact.html">联系我们</a>
+        <a href="index.html">{{T:nav_home}}</a>
+        <a href="menu.html">{{T:nav_menu}}</a>
+        <a href="order.html" class="active">{{T:nav_order}}</a>
+        <a href="contact.html">{{T:nav_contact}}</a>
       </nav>
+      <div class="lang-switch">
+        <select onchange="switchLang(this.value)">
+          <option value="zh" {{LANG_SELECTED_zh}}>中文</option>
+          <option value="en" {{LANG_SELECTED_en}}>English</option>
+          <option value="fr" {{LANG_SELECTED_fr}}>Français</option>
+        </select>
+      </div>
     </div>
   </header>
 
   <main class="order-page">
     <div class="order-menu">
-      <h2 class="section-title" style="text-align:left;margin-bottom:20px;">点餐</h2>
+      <h2 class="section-title" style="text-align:left;margin-bottom:20px;">{{T:section_ordering}}</h2>
       <div data-menu-container></div>
     </div>
 
     <div class="cart-sticky">
       <div class="cart">
-        <h3>购物车</h3>
+        <h3>{{T:section_cart}}</h3>
         <div class="cart-items"></div>
         <div class="cart-total">
-          <span>合计：</span>
-          <span class="cart-total-value">¥0.00</span>
+          <span>{{T:cart_total}}：</span>
+          <span class="cart-total-value">{{CURRENCY_SYMBOL}}0.00</span>
         </div>
         <form class="order-form">
-          <input type="text" name="name" placeholder="姓名 *" required>
-          <input type="tel" name="phone" placeholder="电话 *" required>
-          <input type="text" name="address" placeholder="地址 *" required>
-          <textarea name="note" placeholder="备注（可选）"></textarea>
-          <button type="submit" class="btn">提交订单</button>
+          <input type="text" name="name" placeholder="{{T:form_name}}" required>
+          <input type="tel" name="phone" placeholder="{{T:form_phone}}" required>
+          <input type="text" name="address" placeholder="{{T:form_address}}" required>
+          <textarea name="note" placeholder="{{T:form_note}}"></textarea>
+          <button type="submit" class="btn">{{T:form_submit}}</button>
         </form>
       </div>
     </div>
@@ -52,14 +59,25 @@
 
   <div class="modal-overlay" id="orderModal">
     <div class="modal-box">
-      <h3>🎉 下单成功！</h3>
-      <p>订单号：<span class="order-id">—</span></p>
-      <p>总价：<span class="order-total">¥0.00</span></p>
-      <p style="font-size:0.85rem;color:#999;margin-top:8px;">感谢您的订单，我们会尽快为您准备</p>
-      <button class="btn" onclick="this.closest('.modal-overlay').classList.remove('open')" style="margin-top:16px;">关闭</button>
+      <h3>{{T:order_success_title}}</h3>
+      <p>{{T:order_success_id}}：<span class="order-id">—</span></p>
+      <p>{{T:order_success_total}}：<span class="order-total">{{CURRENCY_SYMBOL}}0.00</span></p>
+      <p style="font-size:0.85rem;color:#999;margin-top:8px;">{{T:order_success_note}}</p>
+      <button class="btn" onclick="this.closest('.modal-overlay').classList.remove('open')" style="margin-top:16px;">{{T:order_modal_close}}</button>
     </div>
   </div>
 
+  <script>
+    window.TRANSLATIONS = {{TRANSLATIONS_JSON}};
+    window.CURRENCY_SYMBOL = '{{CURRENCY_SYMBOL}}';
+    window.LANG = '{{LANG}}';
+    function switchLang(code) {
+      var d = new Date();
+      d.setTime(d.getTime() + 365*24*60*60*1000);
+      document.cookie = 'lang=' + code + ';expires=' + d.toUTCString() + ';path=/';
+      location.reload();
+    }
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

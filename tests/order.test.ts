@@ -66,7 +66,7 @@ describe('Order System', () => {
       }),
     })
     const resp = await handleCreateOrder(req, env)
-    const data = await resp.json()
+    const data: any = await resp.json()
     expect(resp.status === 200 || resp.status === 201).toBe(true)
     expect(data.id).toMatch(/^ORD-/)
     expect(data.total).toBe(81)
@@ -76,7 +76,7 @@ describe('Order System', () => {
     const { handleListOrders } = await import('../merchant-template/worker/src/order')
     const req = new Request('http://localhost/api/orders')
     const resp = await handleListOrders(req, env)
-    const data = await resp.json()
+    const data: any = await resp.json()
     expect(resp.status).toBe(200)
     expect(data.orders).toBeDefined()
     expect(Array.isArray(data.orders)).toBe(true)

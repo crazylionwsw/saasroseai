@@ -20,6 +20,9 @@ const MERCHANT_SAFE_COLUMNS = [
   'id', 'name', 'email', 'phone', 'status', 'plan', 'template_id',
   'subdomain', 'theme_color', 'notes', 'created_at', 'expires_at',
   'cf_account_id', 'cf_api_token',
+  'slogan', 'description', 'address', 'business_hours',
+  'logo_url', 'cover_url', 'social_media',
+  'language', 'currency_symbol',
 ]
 
 function maskMerchant(merchant: Record<string, any>): Record<string, any> {

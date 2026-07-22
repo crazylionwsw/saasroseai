@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{LANG}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{RESTAURANT_NAME}} - 首页</title>
+  <title>{{RESTAURANT_NAME}} - {{T:page_title_home}}</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,15 +13,22 @@
         <img src="{{LOGO_URL}}" alt="{{RESTAURANT_NAME}}">
         <h1>{{RESTAURANT_NAME}}</h1>
       </div>
-      <button class="hamburger" aria-label="菜单">
+      <button class="hamburger" aria-label="{{T:nav_menu}}">
         <span></span><span></span><span></span>
       </button>
       <nav class="nav">
-        <a href="index.html" class="active">首页</a>
-        <a href="menu.html">菜单</a>
-        <a href="order.html">下单</a>
-        <a href="contact.html">联系我们</a>
+        <a href="index.html" class="active">{{T:nav_home}}</a>
+        <a href="menu.html">{{T:nav_menu}}</a>
+        <a href="order.html">{{T:nav_order}}</a>
+        <a href="contact.html">{{T:nav_contact}}</a>
       </nav>
+      <div class="lang-switch">
+        <select onchange="switchLang(this.value)">
+          <option value="zh" {{LANG_SELECTED_zh}}>中文</option>
+          <option value="en" {{LANG_SELECTED_en}}>English</option>
+          <option value="fr" {{LANG_SELECTED_fr}}>Français</option>
+        </select>
+      </div>
     </div>
   </header>
 
@@ -31,13 +38,13 @@
     <div class="hero-content">
       <h2>{{RESTAURANT_SLOGAN}}</h2>
       <p>{{RESTAURANT_DESC_SHORT}}</p>
-      <a href="order.html" class="btn">立即下单</a>
+      <a href="order.html" class="btn">{{T:hero_order_now}}</a>
     </div>
   </section>
 
   <section class="section">
     <div class="container">
-      <h2 class="section-title">关于我们</h2>
+      <h2 class="section-title">{{T:section_about}}</h2>
       <div class="about-content">
         <p>{{RESTAURANT_DESC}}</p>
       </div>
@@ -46,28 +53,28 @@
 
   <section class="section" style="padding-top:0;">
     <div class="container">
-      <h2 class="section-title">推荐菜品</h2>
+      <h2 class="section-title">{{T:section_featured}}</h2>
       <div class="featured-grid" data-menu-container></div>
     </div>
   </section>
 
   <section class="section" style="padding-top:0;">
     <div class="container">
-      <h2 class="section-title">营业信息</h2>
+      <h2 class="section-title">{{T:section_hours}}</h2>
       <div class="info-grid">
         <div class="info-card">
           <div class="icon">📞</div>
-          <h3>电话</h3>
+          <h3>{{T:info_phone}}</h3>
           <p><a href="tel:{{PHONE}}">{{PHONE}}</a></p>
         </div>
         <div class="info-card">
           <div class="icon">📍</div>
-          <h3>地址</h3>
+          <h3>{{T:info_address}}</h3>
           <p>{{ADDRESS}}</p>
         </div>
         <div class="info-card">
           <div class="icon">🕐</div>
-          <h3>营业时间</h3>
+          <h3>{{T:info_hours}}</h3>
           <p>{{BUSINESS_HOURS}}</p>
         </div>
       </div>
@@ -76,23 +83,34 @@
 
   <footer class="footer">
     <div class="container">
-      <p>&copy; 2024 {{RESTAURANT_NAME}} - Powered by Rose SaaS</p>
+      <p>&copy; {{YEAR}} {{RESTAURANT_NAME}} - {{T:footer_powered}}</p>
     </div>
   </footer>
 
-  <button class="chat-btn" aria-label="在线客服">💬</button>
+  <button class="chat-btn" aria-label="{{T:chat_title}}">💬</button>
 
   <div class="chat-modal">
-    <div class="chat-header">在线客服</div>
+    <div class="chat-header">{{T:chat_title}}</div>
     <div class="chat-messages">
-      <div class="chat-msg received">您好！欢迎光临 {{RESTAURANT_NAME}}，请问有什么可以帮您？</div>
+      <div class="chat-msg received">{{T:chat_welcome}}</div>
     </div>
     <div class="chat-input-area">
-      <input class="chat-input" type="text" placeholder="输入消息...">
-      <button class="chat-send">发送</button>
+      <input class="chat-input" type="text" placeholder="{{T:chat_placeholder}}">
+      <button class="chat-send">{{T:chat_send}}</button>
     </div>
   </div>
 
+  <script>
+    window.TRANSLATIONS = {{TRANSLATIONS_JSON}};
+    window.CURRENCY_SYMBOL = '{{CURRENCY_SYMBOL}}';
+    window.LANG = '{{LANG}}';
+    function switchLang(code) {
+      var d = new Date();
+      d.setTime(d.getTime() + 365*24*60*60*1000);
+      document.cookie = 'lang=' + code + ';expires=' + d.toUTCString() + ';path=/';
+      location.reload();
+    }
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@ import type { Env } from './types'
 import { generateAdminToken, verifyAdminToken } from './auth'
 import { handleListMerchants, handleGetMerchant, handleCreateMerchant, handleUpdateMerchant, handleDeleteMerchant, handleVerifyMerchant, handleRegenerateToken } from './merchants'
 import { handleListDeployments, handleCreateDeployment, handleUpdateDeployment } from './deployments'
-import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs, handleGetTemplateFile, handleListTemplates, handleSeedBuiltInTemplates } from './template-scraper'
+import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs, handleGetTemplateFile, handleListTemplates, handleDeleteTemplate, handleSeedBuiltInTemplates } from './template-scraper'
 import { handleDeployToMerchantCF } from './cf-deploy'
 import {
   timingSafeEqual, checkRateLimit, validateMerchantInput,
@@ -11,7 +11,7 @@ import {
 } from './security'
 
 const { preflight, corsify } = cors({
-  allowedOrigins: ['https://rose-saas-admin.pages.dev', 'https://saas.roseai.ca', 'http://localhost:8788'],
+  origin: ['https://rose-saas-admin.pages.dev', 'https://saas.roseai.ca', 'http://localhost:8788'],
   maxAge: 86400,
 })
 
@@ -192,6 +192,26 @@ router.get('/api/templates/scrape/:templateId/file', (request: Request, env: Env
   return handleGetTemplateFile(request, env, (request as any).params.templateId)
 })
 router.get('/api/templates', handleListTemplates)
+router.delete('/api/templates/:templateId', (request: Request, env: Env) => {
+  return handleDeleteTemplate(request, env, (request as any).params.templateId)
+})
+
+// ── Template Marketplace ──
+import { handleListMarketplaceTemplates, handleSubmitTemplate, handleApproveTemplate, handleDeleteTemplate as handleMarketDelete } from './marketplace'
+
+router.get('/api/marketplace/templates', handleListMarketplaceTemplates)
+router.post('/api/marketplace/templates', async (request: Request, env: Env): Promise<Response> => {
+  const ip = getClientIP(request)
+  const rl = checkRateLimit(ip, 'sensitive')
+  if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
+  return handleSubmitTemplate(request, env)
+})
+router.put('/api/marketplace/templates/:templateId', (request: Request, env: Env) => {
+  return handleApproveTemplate(request, env, (request as any).params.templateId)
+})
+router.delete('/api/marketplace/templates/:templateId', (request: Request, env: Env) => {
+  return handleMarketDelete(request, env, (request as any).params.templateId)
+})
 
 // ── Health ──
 router.get('/api/health', () => jsonResponse({ status: 'ok' }))

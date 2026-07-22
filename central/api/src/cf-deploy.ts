@@ -57,7 +57,26 @@ async function getTemplateFiles(env: Env, templateId: string): Promise<TemplateF
   return files
 }
 
-function fillTemplateVariables(files: TemplateFiles, vars: Record<string, string>): TemplateFiles {
+async function loadTranslationsFromR2(env: Env, lang: string): Promise<Record<string, string>> {
+  const SUPPORTED_LANGS = ['zh', 'en', 'fr']
+  const DEFAULT_LANG = 'zh'
+  const fallback: Record<string, string> = {}
+  try {
+    const obj = await env.TEMPLATES_R2.get(`translations/${DEFAULT_LANG}.json`)
+    if (obj) Object.assign(fallback, await obj.json())
+  } catch {}
+  if (lang === DEFAULT_LANG || !SUPPORTED_LANGS.includes(lang)) return fallback
+  try {
+    const obj = await env.TEMPLATES_R2.get(`translations/${lang}.json`)
+    if (obj) {
+      const t = await obj.json() as Record<string, string>
+      return { ...fallback, ...t }
+    }
+  } catch {}
+  return fallback
+}
+
+function fillTemplateVariables(files: TemplateFiles, vars: Record<string, string>, translations?: Record<string, string>): TemplateFiles {
   const filled: TemplateFiles = {}
   for (const [name, content] of Object.entries(files)) {
     if (!content) continue
@@ -65,6 +84,14 @@ function fillTemplateVariables(files: TemplateFiles, vars: Record<string, string
     for (const [key, value] of Object.entries(vars)) {
       html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value)
     }
+    // Render {{T:key}} placeholders
+    if (translations) {
+      html = html.replace(/\{\{T:(\w+)\}\}/g, (_match: string, key: string) => {
+        return translations[key] || key
+      })
+    }
+    // Remove any remaining LANG_SELECTED_* placeholders
+    html = html.replace(/\{\{LANG_SELECTED_(\w+)\}\}/g, '')
     filled[name as keyof TemplateFiles] = html
   }
   return filled
@@ -77,7 +104,9 @@ export async function handleDeployToMerchantCF(request: Request, env: Env, merch
     }
 
     const merchant = await env.CENTRAL_DB.prepare(
-      'SELECT id, name, email, phone, template_id, cf_account_id, cf_api_token FROM merchants WHERE id = ?'
+      `SELECT id, name, email, phone, template_id, cf_account_id, cf_api_token,
+              slogan, description, address, business_hours, logo_url, cover_url, social_media, language
+       FROM merchants WHERE id = ?`
     ).bind(merchantId).first() as Record<string, any> | null
 
     if (!merchant) return errorResponse('商户不存在', 404)
@@ -95,20 +124,42 @@ export async function handleDeployToMerchantCF(request: Request, env: Env, merch
 
     // Fill template variables
     const now = new Date()
+    let socialMedia: Record<string, string> = {}
+    try {
+      socialMedia = JSON.parse(merchant.social_media || '{}')
+    } catch {}
+    const merchantLang = (merchant.language && ['zh', 'en', 'fr'].includes(merchant.language)) ? merchant.language : 'zh'
+    const currencySymbols: Record<string, string> = { zh: '¥', en: '$', fr: '$' }
+    const currencySymbol = currencySymbols[merchantLang] || '$'
+    const translations = await loadTranslationsFromR2(env, merchantLang)
+    const translationsJson = JSON.stringify(translations).replace(/'/g, "\\'").replace(/</g, '\\u003c')
+    const langSelectedVars: Record<string, string> = {}
+    for (const lang of ['zh', 'en', 'fr']) {
+      langSelectedVars[`LANG_SELECTED_${lang}`] = ''
+    }
+    langSelectedVars[`LANG_SELECTED_${merchantLang}`] = 'selected'
+
     const vars: Record<string, string> = {
       RESTAURANT_NAME: merchant.name || '',
-      RESTAURANT_SLOGAN: '',
-      RESTAURANT_DESC_SHORT: '',
-      RESTAURANT_DESC: '',
+      RESTAURANT_SLOGAN: merchant.slogan || '',
+      RESTAURANT_DESC_SHORT: merchant.description ? merchant.description.slice(0, 100) : '',
+      RESTAURANT_DESC: merchant.description || '',
       PHONE: merchant.phone || '',
       EMAIL: merchant.email || '',
-      ADDRESS: '',
-      BUSINESS_HOURS: '',
-      LOGO_URL: '',
-      COVER_URL: '',
+      ADDRESS: merchant.address || '',
+      BUSINESS_HOURS: merchant.business_hours || '',
+      LOGO_URL: merchant.logo_url || '',
+      COVER_URL: merchant.cover_url || '',
       YEAR: String(now.getFullYear()),
+      WECHAT_URL: socialMedia.wechat || '#',
+      DOUYIN_URL: socialMedia.douyin || '#',
+      XIAOHONGSHU_URL: socialMedia.xiaohongshu || '#',
+      LANG: merchantLang,
+      CURRENCY_SYMBOL: currencySymbol,
+      TRANSLATIONS_JSON: translationsJson,
+      ...langSelectedVars,
     }
-    const filledFiles = fillTemplateVariables(templateFiles, vars)
+    const filledFiles = fillTemplateVariables(templateFiles, vars, translations)
 
     // Ensure Pages project exists
     const projectName = `storefront-${merchantId}`

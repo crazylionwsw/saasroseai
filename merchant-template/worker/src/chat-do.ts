@@ -13,10 +13,13 @@ interface ChatRoomState {
   context: { chunks: string[]; documents: string[] }
 }
 
-export class ChatRoom extends DurableObject {
-  private state: ChatRoomState
-  private env: Env
-  private server?: WebSocket
+const SUPPORTED_LANGS = ['zh', 'en', 'fr']
+const DEFAULT_LANG = 'zh'
+
+export class ChatRoom extends DurableObject<Env> {
+  state!: ChatRoomState
+  server?: WebSocket
+  merchantLang: string = DEFAULT_LANG
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -33,7 +36,20 @@ export class ChatRoom extends DurableObject {
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get<ChatRoomState>('state')
       if (stored) this.state = stored
+      await this.ensureLanguageLoaded()
     })
+  }
+
+  private async ensureLanguageLoaded(): Promise<void> {
+    try {
+      const merchant = await this.env.MERCHANT_DB.prepare(
+        'SELECT language FROM merchant_info WHERE id = ?'
+      ).bind(this.state.merchantId).first() as { language?: string } | null
+      this.merchantLang = (merchant?.language && SUPPORTED_LANGS.includes(merchant.language))
+        ? merchant.language : DEFAULT_LANG
+    } catch {
+      this.merchantLang = DEFAULT_LANG
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -125,8 +141,10 @@ export class ChatRoom extends DurableObject {
   async generateReply(userMsg: string): Promise<string> {
     const chunks = await this.searchKnowledge(userMsg)
     const merchantName = this.state.merchantId
+    const languageMap: Record<string, string> = { zh: 'Chinese (Mandarin)', en: 'English', fr: 'French' }
+    const langName = languageMap[this.merchantLang] || 'English'
 
-    const systemContent = `You are a customer service assistant for merchant "${merchantName}". Current mode: ${this.state.mode}. Use the following knowledge to answer the customer's question:\n\n${chunks.join('\n\n')}`
+    const systemContent = `You are a customer service assistant for merchant "${merchantName}". Current mode: ${this.state.mode}. Use the following knowledge to answer the customer's question:\n\n${chunks.join('\n\n')}\n\nIMPORTANT: Respond in ${langName}.`
 
     const recentMessages = this.state.messages.slice(-10)
     const llmMessages: { role: string; content: string }[] = [
@@ -249,15 +267,14 @@ export class ChatRoom extends DurableObject {
     const sessionId = generateId('sess_')
     const stmts = this.state.messages.map(msg =>
       this.env.MERCHANT_DB.prepare(
-        `INSERT INTO chat_messages (id, merchant_id, customer_id, role, content, timestamp, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO chat_messages (id, session_id, merchant_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)`
       ).bind(
         msg.id,
+        sessionId,
         this.state.merchantId,
-        this.state.customerId,
         msg.role,
         msg.content,
-        msg.timestamp,
-        sessionId,
+        new Date(msg.timestamp).toISOString(),
       )
     )
     if (stmts.length > 0) {

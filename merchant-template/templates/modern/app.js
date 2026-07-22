@@ -1,5 +1,9 @@
 document.addEventListener('DOMContentLoaded', function () {
   const CART_KEY = 'rose_cart';
+  const T = window.TRANSLATIONS || {};
+  const C = window.CURRENCY_SYMBOL || '$';
+
+  function __(key, fallback) { return T[key] || fallback || key; }
 
   let menuData = [];
   let cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
@@ -13,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function formatPrice(p) {
-    return '¥' + parseFloat(p).toFixed(2);
+    return C + parseFloat(p).toFixed(2);
   }
 
   function saveCart() {
@@ -27,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     containers.forEach(function (el) {
       if (!cart.length) {
-        el.innerHTML = '<p style="color:#999;font-size:0.82rem;padding:12px 0;font-weight:300;">购物车为空</p>';
+        el.innerHTML = '<p style="color:#999;font-size:0.82rem;padding:12px 0;font-weight:300;">' + __('cart_empty') + '</p>';
         return;
       }
       el.innerHTML = cart.map(function (item, idx) {
@@ -98,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var containers = document.querySelectorAll('[data-menu-container]');
     if (!containers.length) return;
 
-    containers.forEach(function (el) { el.innerHTML = '<div class="loading"><div class="spinner"></div><p>加载菜单中...</p></div>'; });
+    containers.forEach(function (el) { el.innerHTML = '<div class="loading"><div class="spinner"></div><p>' + __('loading_menu') + '</p></div>'; });
 
     fetch(getApiUrl('/api/menu'))
       .then(function (r) { return r.json(); })
@@ -108,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderFeatured();
       })
       .catch(function () {
-        containers.forEach(function (el) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px;font-weight:300;">菜单加载失败，请稍后重试</p>'; });
+        containers.forEach(function (el) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px;font-weight:300;">' + __('menu_load_error') + '</p>'; });
       });
   }
 
@@ -116,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var containers = document.querySelectorAll('[data-menu-container]');
     var cats = {};
     menuData.forEach(function (d) {
-      var c = d.category || '其他';
+      var c = d.category || __('category_other');
       if (!cats[c]) cats[c] = [];
       cats[c].push(d);
     });
@@ -137,7 +141,7 @@ document.addEventListener('DOMContentLoaded', function () {
               '<h3>' + d.name + '</h3>' +
               '<div class="desc">' + (d.description || '') + '</div>' +
               '<div class="price">' + formatPrice(d.price) + '</div>' +
-              '<button class="btn add-to-cart" data-id="' + d.id + '" style="margin-top:10px;padding:7px 16px;font-size:0.8rem;">加入购物车</button>' +
+              '<button class="btn add-to-cart" data-id="' + d.id + '" style="margin-top:10px;padding:7px 16px;font-size:0.8rem;">' + __('cart_add') + '</button>' +
             '</div>' +
           '</div>'
         );
@@ -162,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
                   '<h3>' + d.name + '</h3>' +
                   '<div class="desc">' + (d.description || '') + '</div>' +
                   '<div class="price">' + formatPrice(d.price) + '</div>' +
-                  '<button class="btn add-to-cart" data-id="' + d.id + '" style="margin-top:10px;padding:7px 16px;font-size:0.8rem;">加入购物车</button>' +
+                  '<button class="btn add-to-cart" data-id="' + d.id + '" style="margin-top:10px;padding:7px 16px;font-size:0.8rem;">' + __('cart_add') + '</button>' +
                 '</div>' +
               '</div>'
             );
@@ -199,14 +203,14 @@ document.addEventListener('DOMContentLoaded', function () {
       var address = orderForm.querySelector('[name="address"]');
       var note = orderForm.querySelector('[name="note"]');
 
-      if (!name.value.trim()) { alert('请输入姓名'); name.focus(); return; }
-      if (!phone.value.trim()) { alert('请输入电话'); phone.focus(); return; }
-      if (!address.value.trim()) { alert('请输入地址'); address.focus(); return; }
-      if (!cart.length) { alert('购物车为空，请先选择菜品'); return; }
+      if (!name.value.trim()) { alert(__('order_error_no_name')); name.focus(); return; }
+      if (!phone.value.trim()) { alert(__('order_error_no_phone')); phone.focus(); return; }
+      if (!address.value.trim()) { alert(__('order_error_no_address')); address.focus(); return; }
+      if (!cart.length) { alert(__('order_error_empty_cart')); return; }
 
       var submitBtn = orderForm.querySelector('[type="submit"]');
       submitBtn.disabled = true;
-      submitBtn.textContent = '提交中...';
+      submitBtn.textContent = __('form_submitting');
 
       var payload = {
         name: name.value.trim(),
@@ -238,11 +242,11 @@ document.addEventListener('DOMContentLoaded', function () {
           orderForm.reset();
         })
         .catch(function () {
-          alert('订单提交失败，请稍后重试');
+          alert(__('order_error_submit'));
         })
         .finally(function () {
           submitBtn.disabled = false;
-          submitBtn.textContent = '提交订单';
+          submitBtn.textContent = __('form_submit');
         });
     });
   }
@@ -282,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'message', content: text }));
       } else {
-        appendChatMessage('客服暂时离线，请稍后再试', 'received');
+        appendChatMessage(__('chat_offline'), 'received');
       }
       chatInput.value = '';
     }
@@ -310,7 +314,7 @@ document.addEventListener('DOMContentLoaded', function () {
       ws = new WebSocket(wsUrl);
       ws.onopen = function () {
         wsConnected = true;
-        appendChatMessage('已连接在线客服', 'received');
+        appendChatMessage(__('chat_connected'), 'received');
       };
       ws.onmessage = function (e) {
         try {
@@ -324,7 +328,7 @@ document.addEventListener('DOMContentLoaded', function () {
       };
       ws.onclose = function () {
         wsConnected = false;
-        appendChatMessage('连接已断开', 'received');
+        appendChatMessage(__('chat_disconnected'), 'received');
       };
       ws.onerror = function () {
         wsConnected = false;

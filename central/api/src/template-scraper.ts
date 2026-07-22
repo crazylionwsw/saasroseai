@@ -18,7 +18,7 @@ function generateId(): string {
   return 'tpl-' + crypto.randomUUID().slice(0, 8)
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -680,6 +680,44 @@ export async function handleListTemplates(request: Request, env: Env): Promise<R
   }
 
   return jsonResponse({ templates })
+}
+
+export async function handleDeleteTemplate(request: Request, env: Env, templateId: string): Promise<Response> {
+  try {
+    const BUILT_IN = ['classic', 'modern']
+    if (BUILT_IN.includes(templateId)) {
+      return errorResponse('内置模板不可删除', 400)
+    }
+
+    const usage = await env.CENTRAL_DB.prepare(
+      "SELECT COUNT(*) as count FROM merchants WHERE template_id = ? AND status != 'deleted'"
+    ).bind(templateId).first<{ count: number }>()
+
+    const usingCount = usage?.count || 0
+
+    const body = await request.json<{ force?: boolean }>().catch(() => ({ force: false }))
+    if (usingCount > 0 && !body.force) {
+      return jsonResponse({
+        confirm: true,
+        usingCount,
+        message: `有 ${usingCount} 个商户正在使用该模板，删除后已部署的商户不受影响，是否继续？`,
+      })
+    }
+
+    await env.CENTRAL_DB.prepare('DELETE FROM templates WHERE id = ?').bind(templateId).run()
+
+    try {
+      const objects = await env.TEMPLATES_R2.list({ prefix: `templates/${templateId}/` })
+      for (const obj of objects.objects) {
+        await env.TEMPLATES_R2.delete(obj.key)
+      }
+    } catch {}
+
+    return jsonResponse({ success: true, usingCount, deleted: true })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`删除模板失败: ${msg}`, 500)
+  }
 }
 
 export async function handleSeedBuiltInTemplates(env: Env): Promise<void> {

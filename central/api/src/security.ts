@@ -142,6 +142,9 @@ const MERCHANT_UPDATE_COLUMNS = new Set([
   'name', 'email', 'phone', 'status', 'plan',
   'template_id', 'theme_color', 'notes', 'expires_at',
   'cf_account_id', 'cf_api_token',
+  'slogan', 'description', 'address', 'business_hours',
+  'logo_url', 'cover_url', 'social_media',
+  'language', 'currency_symbol',
 ])
 
 export function isAllowedColumn(col: string): boolean {

@@ -15,7 +15,16 @@ CREATE TABLE IF NOT EXISTS merchants (
   theme_color TEXT DEFAULT '#8B0000',
   created_at TEXT DEFAULT (datetime('now')),
   expires_at TEXT,
-  notes TEXT
+  notes TEXT,
+  slogan TEXT,
+  description TEXT,
+  address TEXT,
+  business_hours TEXT,
+  logo_url TEXT,
+  cover_url TEXT,
+  social_media TEXT,
+  language TEXT DEFAULT 'zh',
+  currency_symbol TEXT
 );
 
 CREATE TABLE IF NOT EXISTS merchant_configs (

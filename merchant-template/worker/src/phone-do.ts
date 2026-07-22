@@ -18,15 +18,37 @@ interface Env {
   RECORDINGS: R2Bucket
   KNOWLEDGE: VectorizeIndex
   AI: Ai
+  ASSETS: R2Bucket
   MERCHANT_ID: string
   TWILIO_ACCOUNT_SID: string
   TWILIO_AUTH_TOKEN: string
   TWILIO_PHONE_NUMBER: string
 }
 
-export class PhoneCall extends DurableObject {
-  private state: CallState
-  private env: Env
+const SUPPORTED_LANGS = ['zh', 'en', 'fr']
+const DEFAULT_LANG = 'zh'
+
+async function loadPhoneTranslations(env: Env, lang: string): Promise<Record<string, string>> {
+  const fallback: Record<string, string> = {}
+  try {
+    const obj = await env.ASSETS.get(`translations/${DEFAULT_LANG}.json`)
+    if (obj) Object.assign(fallback, await obj.json())
+  } catch {}
+  if (lang === DEFAULT_LANG) return fallback
+  try {
+    const obj = await env.ASSETS.get(`translations/${lang}.json`)
+    if (obj) {
+      const t = await obj.json() as Record<string, string>
+      return { ...fallback, ...t }
+    }
+  } catch {}
+  return fallback
+}
+
+export class PhoneCall extends DurableObject<Env> {
+  state: CallState
+  merchantLang: string = DEFAULT_LANG
+  translations: Record<string, string> = {}
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -45,7 +67,25 @@ export class PhoneCall extends DurableObject {
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get<CallState>('state')
       if (stored) this.state = stored
+      await this.ensureLanguageLoaded()
     })
+  }
+
+  private async ensureLanguageLoaded(): Promise<void> {
+    try {
+      const merchant = await this.env.MERCHANT_DB.prepare(
+        'SELECT language FROM merchant_info WHERE id = ?'
+      ).bind(this.state.merchantId).first() as { language?: string } | null
+      this.merchantLang = (merchant?.language && SUPPORTED_LANGS.includes(merchant.language))
+        ? merchant.language : DEFAULT_LANG
+    } catch {
+      this.merchantLang = DEFAULT_LANG
+    }
+    this.translations = await loadPhoneTranslations(this.env, this.merchantLang)
+  }
+
+  private t(key: string, fallback: string): string {
+    return this.translations?.[key] || fallback
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -82,8 +122,8 @@ export class PhoneCall extends DurableObject {
 
     const merchant = await this.getMerchantInfo()
     const welcomeMessage = merchant?.name
-      ? `Hello, you've reached ${merchant.name}. How can I help you today?`
-      : 'Hello, how can I help you today?'
+      ? this.t('phone_greeting', `Hello, you've reached ${merchant.name}. How can I help you today?`).replace('{{RESTAURANT_NAME}}', merchant.name)
+      : this.t('phone_greeting', 'Hello, how can I help you today?').replace('{{RESTAURANT_NAME}}', '')
 
     this.state.conversation.push({ role: 'system', text: welcomeMessage })
     await this.ctx.storage.put('state', this.state)
@@ -107,10 +147,11 @@ export class PhoneCall extends DurableObject {
     if (!speechResult.trim()) {
       this.state.status = 'listening'
       await this.ctx.storage.put('state', this.state)
+      const retryMsg = this.t('phone_no_answer', "I didn't catch that. Could you please say it again?")
       return this.twimlResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather input="speech" timeout="3" action="/process-speech">
-    <Say>I didn't catch that. Could you please say it again?</Say>
+    <Say>${this.escapeXml(retryMsg)}</Say>
   </Gather>
 </Response>`)
     }
@@ -132,11 +173,12 @@ export class PhoneCall extends DurableObject {
 
     const responseText = await this.processUserInput(speechResult)
 
-    if (this.state.hangup || this.state.status === 'ended') {
+    const currentStatus: string = this.state.status
+    if (this.state.hangup || currentStatus === 'ended') {
       return this.endCall()
     }
 
-    if (this.state.status === 'transferring') {
+    if (currentStatus === 'transferring') {
       return this.twimlResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Please hold while I transfer you to a representative.</Say>
@@ -199,11 +241,11 @@ export class PhoneCall extends DurableObject {
         if (merchant?.phone) {
           await this.transferToHuman(merchant.phone)
         }
-        return 'Please hold while I transfer you to a representative.'
+        return this.t('phone_transfer', 'Please hold while I transfer you to a representative.')
       }
       case 'end_call': {
         this.state.hangup = true
-        return 'Thank you for calling. Have a great day!'
+        return this.t('phone_goodbye', 'Thank you for calling. Have a great day!')
       }
       default: {
         return this.generateResponse(transcript, intent)
@@ -252,11 +294,15 @@ Respond with only the intent name.`
       ? relevantChunks.join('\n\n')
       : 'No specific information available.'
 
+    const languageMap: Record<string, string> = { zh: 'Chinese (Mandarin)', en: 'English', fr: 'French' }
+    const langName = languageMap[this.merchantLang] || 'English'
+
     const systemContent = `You are a friendly phone assistant for ${merchantName}. 
 Business info: name=${merchant?.name || 'N/A'}, address=${merchant?.address || 'N/A'}, phone=${merchant?.phone || 'N/A'}, hours=${merchant?.businessHours || 'N/A'}
 Knowledge:\n${knowledgeBase}
 Intent: ${intent}
 
+IMPORTANT: Respond in ${langName}. 
 Keep responses very concise and conversational — this is a phone call. Speak naturally. Never use markdown, emoji, or special characters. If you don't know something, politely say so and offer to transfer.`
 
     try {
@@ -300,9 +346,11 @@ Keep responses very concise and conversational — this is a phone call. Speak n
 
     try {
       const summary = await this.generateSummary()
+      const recordId = 'cr_' + crypto.randomUUID().slice(0, 8)
       await this.env.MERCHANT_DB.prepare(
-        `INSERT INTO call_records (call_sid, merchant_id, customer_number, status, duration, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO call_records (id, call_sid, merchant_id, customer_number, status, duration, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
+        recordId,
         this.state.callSid,
         this.state.merchantId,
         this.state.customerNumber,
@@ -377,9 +425,11 @@ Keep responses very concise and conversational — this is a phone call. Speak n
 
     try {
       const summary = await this.generateSummary()
+      const recordId = 'cr_' + crypto.randomUUID().slice(0, 8)
       await this.env.MERCHANT_DB.prepare(
-        `INSERT INTO call_records (call_sid, merchant_id, customer_number, status, duration, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO call_records (id, call_sid, merchant_id, customer_number, status, duration, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
+        recordId,
         this.state.callSid,
         this.state.merchantId,
         this.state.customerNumber,

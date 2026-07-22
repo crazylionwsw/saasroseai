@@ -10,6 +10,9 @@ export interface Env {
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_PHONE_NUMBER?: string;
   AI: Ai;
+  CHAT_ROOM_DO: DurableObjectNamespace;
+  PHONE_CALL_DO: DurableObjectNamespace;
+  translations?: { get: (key: string) => Promise<R2ObjectBody | null> };
 }
 
 export interface MenuItem {
@@ -40,6 +43,8 @@ export interface MerchantInfo {
   socialMedia?: string;
   enableOrdering: number; enablePayment: number;
   enableChat: number; enablePhone: number;
+  language?: string;
+  currencySymbol?: string;
 }
 
 export interface Message {

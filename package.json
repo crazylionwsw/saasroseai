@@ -2,7 +2,7 @@
   "name": "rose-saas",
   "version": "1.0.0",
   "private": true,
-  "description": "餐饮门店在线智能服务体平台",
+  "description": "中小餐厅营销智能化解决方案",
   "scripts": {
     "dev:central-api": "wrangler dev --config central/api/wrangler.jsonc",
     "dev:central-ui": "wrangler pages dev central/admin-ui --port 8788",

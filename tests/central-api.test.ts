@@ -99,7 +99,7 @@ describe('Central API - Merchant Management', () => {
       headers: { Authorization: 'Bearer test-admin-token' },
     })
     const resp = await handleListMerchants(req, env)
-    const data = await resp.json()
+    const data: any = await resp.json()
     expect(resp.status).toBe(200)
     expect(data.merchants).toBeDefined()
     expect(data.merchants.length).toBeGreaterThanOrEqual(1)
@@ -122,7 +122,7 @@ describe('Central API - Merchant Management', () => {
       }),
     })
     const resp = await handleCreateMerchant(req, env)
-    const data = await resp.json()
+    const data: any = await resp.json()
     expect(resp.status === 200 || resp.status === 201).toBe(true)
     expect(data.id).toMatch(/^m-/)
     expect(data.name).toBe('新餐厅')
@@ -150,7 +150,7 @@ describe('Central API - Merchant Management', () => {
       },
     })
     const resp = await handleVerifyMerchant(req, env)
-    const data = await resp.json()
+    const data: any = await resp.json()
     expect(resp.status).toBe(200)
     expect(data.merchantId).toBe('m-verify1')
     expect(data.plan).toBe('pro')

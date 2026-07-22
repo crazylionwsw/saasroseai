@@ -77,17 +77,17 @@ export async function syncMerchantKnowledge(
     const driveFiles = await listDriveFiles(accessToken, env.DRIVE_FOLDER_ID)
 
     const { results: existingDocs } = await env.MERCHANT_DB.prepare(
-      `SELECT file_id, file_name, mime_type, modified_at, status
+      `SELECT drive_file_id, drive_file_name, drive_mime_type, drive_modified_at, status
        FROM knowledge_docs
        WHERE merchant_id = ?`
     ).bind(merchantId).all<{
-      file_id: string; file_name: string; mime_type: string; modified_at: string; status: string
+      drive_file_id: string; drive_file_name: string; drive_mime_type: string; drive_modified_at: string; status: string
     }>()
 
     const existingMap = new Map<string, typeof existingDocs[0]>()
     if (existingDocs) {
       for (const doc of existingDocs) {
-        existingMap.set(doc.file_id, doc)
+        existingMap.set(doc.drive_file_id, doc)
       }
     }
 
@@ -103,7 +103,7 @@ export async function syncMerchantKnowledge(
           continue
         }
 
-        if (existing && existing.modified_at >= file.modifiedAt) {
+        if (existing && existing.drive_modified_at >= file.modifiedAt) {
           continue
         }
 
@@ -145,13 +145,13 @@ export async function syncMerchantKnowledge(
         if (existing) {
           await env.MERCHANT_DB.prepare(
             `UPDATE knowledge_docs
-             SET file_name = ?, mime_type = ?, modified_at = ?, chunk_count = ?, status = 'active', updated_at = datetime('now')
-             WHERE file_id = ? AND merchant_id = ?`
+             SET drive_file_name = ?, drive_mime_type = ?, drive_modified_at = ?, chunk_count = ?, status = 'active'
+             WHERE drive_file_id = ? AND merchant_id = ?`
           ).bind(file.name, file.mimeType, file.modifiedAt, chunks.length, file.id, merchantId).run()
         } else {
           await env.MERCHANT_DB.prepare(
-            `INSERT INTO knowledge_docs (file_id, merchant_id, file_name, mime_type, modified_at, chunk_count, status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))`
+            `INSERT INTO knowledge_docs (drive_file_id, merchant_id, drive_file_name, drive_mime_type, drive_modified_at, chunk_count, status)
+             VALUES (?, ?, ?, ?, ?, ?, 'active')`
           ).bind(file.id, merchantId, file.name, file.mimeType, file.modifiedAt, chunks.length).run()
         }
 
@@ -173,8 +173,8 @@ export async function syncMerchantKnowledge(
         await deleteVectorsForFile(fileId, merchantId, env)
 
         await env.MERCHANT_DB.prepare(
-          `UPDATE knowledge_docs SET status = 'deleted', updated_at = datetime('now')
-           WHERE file_id = ? AND merchant_id = ?`
+          `UPDATE knowledge_docs SET status = 'deleted'
+           WHERE drive_file_id = ? AND merchant_id = ?`
         ).bind(fileId, merchantId).run()
       }
     }

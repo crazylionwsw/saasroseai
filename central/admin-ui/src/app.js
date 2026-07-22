@@ -484,6 +484,7 @@ async function renderTemplates() {
               <th>类型</th>
               <th>状态</th>
               <th>创建时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="tpl-table-body"></tbody>
@@ -513,6 +514,7 @@ async function renderTemplates() {
       const statusLabel = t.is_active ? '<span class="badge active">启用</span>' : '<span class="badge expired">停用</span>'
       const createdAt = t.created_at ? new Date(t.created_at).toLocaleString('zh-CN') : '-'
       const desc = escHtml(t.description || '').slice(0, 60)
+      const deleteBtn = isBuiltIn ? '-' : `<button class="btn btn-sm btn-danger" onclick="deleteTemplate('${escHtml(t.id)}','${escHtml(t.name)}')">删除</button>`
       return `<tr>
         <td><code style="font-size:12px;">${escHtml(t.id)}</code></td>
         <td><strong>${escHtml(t.name || t.id)}</strong></td>
@@ -520,10 +522,43 @@ async function renderTemplates() {
         <td>${typeLabel}</td>
         <td>${statusLabel}</td>
         <td style="font-size:12px;color:var(--text-light);">${createdAt}</td>
+        <td>${deleteBtn}</td>
       </tr>`
     }).join('')
   } catch (e) {
     document.getElementById('tpl-loading').innerHTML = `<span style="color:var(--red);">❌ 加载失败: ${e.message}</span>`
+  }
+}
+
+async function deleteTemplate(id, name) {
+  try {
+    const resp = await fetch(API_BASE + '/api/templates/' + id, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+    })
+    const data = await resp.json()
+    if (data.confirm) {
+      if (!confirm(data.message)) return
+      const resp2 = await fetch(API_BASE + '/api/templates/' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      })
+      const data2 = await resp2.json()
+      if (data2.success) {
+        alert('模板已删除')
+        renderTemplates()
+      } else {
+        alert('删除失败: ' + (data2.error || '未知错误'))
+      }
+    } else if (data.success) {
+      alert('模板已删除')
+      renderTemplates()
+    } else {
+      alert('删除失败: ' + (data.error || '未知错误'))
+    }
+  } catch (e) {
+    alert('删除失败: ' + e.message)
   }
 }
 
