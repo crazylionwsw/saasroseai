@@ -592,98 +592,93 @@ function scrapeWebsite() {
 async function startScrape(url) {
   const statusEl = document.getElementById('scrape-status')
   statusEl.style.display = 'block'
-  statusEl.innerHTML = '<div class="loading">正在采集网站，请稍候...</div>'
+  statusEl.innerHTML = '<div class="scrape-progress" id="scrape-steps"><div class="scrape-step"><span class="step-icon">→</span><span>正在发起采集请求...</span></div></div>'
 
   try {
-    const data = await api('/api/templates/scrape', {
+    const token = getToken()
+    const response = await fetch(API_BASE + '/api/templates/scrape', {
       method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      },
       body: JSON.stringify({ url }),
     })
 
-    if (data.jobId) {
-      pollScrapeJob(data.jobId)
-    } else if (data.success) {
-      const itemCount = data.menuItems ? data.menuItems.length : 0
-      statusEl.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;padding:8px;">
-          <span style="font-size:24px;">✅</span>
-          <div>
-            <strong>采集完成!</strong>
-            <p style="margin:4px 0 0;color:#666;font-size:13px;">
-              餐厅: <strong>${escHtml(data.name)}</strong>
-            </p>
-            <p style="margin:2px 0 0;color:#666;font-size:13px;">
-              电话: ${escHtml(data.phone || '—')} · 邮箱: ${escHtml(data.email || '—')} · 菜品: ${itemCount}
-            </p>
-            <p style="margin:2px 0 0;color:#666;font-size:13px;">
-              模板已生成: <code>${data.templateId}</code>
-            </p>
-          </div>
-          <button class="btn btn-sm btn-primary" onclick="this.closest('#scrape-status').style.display='none';renderTemplates()" style="margin-left:auto;">
-            刷新模板列表
-          </button>
-        </div>
-      `
-    } else {
-      statusEl.innerHTML = `<div class="empty-state"><p>❌ 采集失败: 未知错误</p></div>`
-    }
-  } catch (e) {
-    statusEl.innerHTML = `<div class="empty-state"><p>❌ 提交失败: ${e.message}</p></div>`
-  }
-}
-
-async function pollScrapeJob(jobId) {
-  const statusEl = document.getElementById('scrape-status')
-  try {
-    const data = await api(`/api/templates/scrape/${jobId}`)
-    const job = data.job
-    if (!job) {
-      statusEl.innerHTML = '<div class="empty-state"><p>❌ 任务不存在</p></div>'
+    if (!response.ok) {
+      const text = await response.text()
+      let msg = response.statusText
+      try { const j = JSON.parse(text); msg = j.error || msg } catch {}
+      statusEl.innerHTML = `<div class="empty-state"><p>❌ 采集失败: ${escHtml(msg)}</p></div>`
       return
     }
 
-    if (job.status === 'completed') {
-      statusEl.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;padding:8px;">
-          <span style="font-size:24px;">✅</span>
-          <div>
-            <strong>采集完成!</strong>
-            <p style="margin:4px 0 0;color:#666;font-size:13px;">
-              模板已生成: <code>${job.templateId || '—'}</code>
-            </p>
-            <p style="margin:2px 0 0;color:#666;font-size:13px;">来源: ${escHtml(job.sourceUrl)}</p>
-          </div>
-          <button class="btn btn-sm btn-primary" onclick="this.closest('#scrape-status').style.display='none';renderTemplates()" style="margin-left:auto;">
-            刷新模板列表
-          </button>
-        </div>
-      `
-    } else if (job.status === 'failed') {
-      statusEl.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;padding:8px;">
-          <span style="font-size:24px;">❌</span>
-          <div>
-            <strong>采集失败</strong>
-            <p style="margin:4px 0 0;color:#e74c3c;font-size:13px;">${escHtml(job.error || '未知错误')}</p>
-          </div>
-          <button class="btn btn-sm btn-secondary" onclick="this.closest('#scrape-status').style.display='none'" style="margin-left:auto;">关闭</button>
-        </div>
-      `
-    } else {
-      const statusText = '⏳ 处理中...'
-      statusEl.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;padding:8px;">
-          <div style="width:20px;height:20px;border:2px solid #ddd;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-          <div>
-            <strong>${statusText}</strong>
-            <p style="margin:4px 0 0;color:#666;font-size:13px;">${escHtml(job.progress || '')}</p>
-          </div>
-        </div>
-      `
-      setTimeout(() => pollScrapeJob(jobId), 2000)
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let completedData = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        let eventType = 'message'
+        let dataStr = ''
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim()
+          else if (line.startsWith('data: ')) dataStr = line.slice(6)
+        }
+        if (!dataStr) continue
+        let parsed
+        try { parsed = JSON.parse(dataStr) } catch { continue }
+
+        if (eventType === 'progress') {
+          const stepsEl = document.getElementById('scrape-steps')
+          if (stepsEl) {
+            stepsEl.innerHTML += `<div class="scrape-step"><span class="step-icon">→</span><span>${escHtml(parsed.message || '')}</span></div>`
+            stepsEl.scrollTop = stepsEl.scrollHeight
+          }
+        } else if (eventType === 'completed') {
+          completedData = parsed
+          const stepsEl = document.getElementById('scrape-steps')
+          if (stepsEl) {
+            stepsEl.innerHTML += `<div class="scrape-step completed"><span class="step-icon">✅</span><span><strong>采集完成！</strong></span></div>`
+          }
+          const itemCount = parsed.menuItems ? parsed.menuItems.length : 0
+          statusEl.innerHTML += `
+            <div class="scrape-result">
+              <p>餐厅: <strong>${escHtml(parsed.name)}</strong> · 电话: ${escHtml(parsed.phone || '—')} · 菜品: ${itemCount}</p>
+              <p>模板已生成: <code>${parsed.templateId}</code></p>
+              <p style="margin-top:8px;color:#999;font-size:12px;">2 秒后自动刷新模板列表...</p>
+            </div>
+          `
+          setTimeout(() => {
+            renderTemplates()
+            statusEl.style.display = 'none'
+          }, 2000)
+        } else if (eventType === 'error') {
+          const stepsEl = document.getElementById('scrape-steps')
+          if (stepsEl) {
+            stepsEl.innerHTML += `<div class="scrape-step error"><span class="step-icon">❌</span><span>${escHtml(parsed.message || '采集失败')}</span></div>`
+          }
+        }
+      }
+    }
+
+    if (!completedData) {
+      const stepsEl = document.getElementById('scrape-steps')
+      if (stepsEl) {
+        stepsEl.innerHTML += `<div class="scrape-step error"><span class="step-icon">❌</span><span>采集未完成，连接已关闭</span></div>`
+      }
     }
   } catch (e) {
-    statusEl.innerHTML = `<div class="empty-state"><p>❌ 查询失败: ${e.message}</p></div>`
+    statusEl.innerHTML = `<div class="empty-state"><p>❌ 采集失败: ${escHtml(e.message)}</p></div>`
   }
 }
 

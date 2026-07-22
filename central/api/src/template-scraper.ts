@@ -14,6 +14,16 @@ function errorResponse(error: string, code: number): Response {
   })
 }
 
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+async function writeSSE(writer: WritableStreamDefaultWriter, encoder: TextEncoder, event: string, data: unknown): Promise<void> {
+  try {
+    await writer.write(encoder.encode(sseEvent(event, data)))
+  } catch {}
+}
+
 function generateId(): string {
   return 'tpl-' + crypto.randomUUID().slice(0, 8)
 }
@@ -501,7 +511,102 @@ function escHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
+type ProgressCallback = (event: string, data: unknown) => Promise<void>
+
+async function runScrape(url: string, env: Env, progress: ProgressCallback): Promise<{
+  templateId: string
+  name: string
+  phone: string
+  email: string
+  address: string
+  businessHours: string
+  description: string
+  slogan: string
+  primaryColor: string
+  menuItems: { name: string; price: string; category: string }[]
+  socialLinks: Record<string, string>
+  pagesFound: number
+}> {
+  await progress('progress', { step: 'fetch', message: '正在获取主页面...' })
+
+  const { html: mainHtml, baseUrl } = await fetchPage(url)
+
+  await progress('progress', { step: 'discover', message: '正在发现相关页面...' })
+  const pages = await discoverLinkedPages(mainHtml, baseUrl)
+  await progress('progress', { step: 'discover_done', message: `发现 ${pages.length} 个页面，正在分析内容...` })
+
+  await progress('progress', { step: 'extract', message: '正在提取商户信息（名称、电话、地址等）...' })
+  const content = await extractContent(mainHtml, pages, baseUrl)
+  await progress('progress', { step: 'extract_done', message: `已提取: ${content.name} · ${content.phone || '无电话'} · ${content.email || '无邮箱'} · ${content.menuItems.length} 个菜品` })
+
+  await progress('progress', { step: 'analyze_menu', message: `正在分析菜单数据（${content.menuItems.length} 个菜品）...` })
+  await progress('progress', { step: 'extract_colors', message: `主题色: ${content.primaryColor} · 社交账号: ${Object.keys(content.socialLinks).length} 个` })
+
+  const templateId = generateId()
+  await progress('progress', { step: 'generate', message: '正在生成模板（index, menu, contact, style）...' })
+
+  const { indexHtml, menuHtml, contactHtml, styleCss } = generateTemplateHtml(content)
+
+  await progress('progress', { step: 'save_r2', message: '正在保存到 R2 存储...' })
+
+  const r2 = env.TEMPLATES_R2
+  const scrapedPath = `scraped/${templateId}`
+  const templatePath = `templates/${templateId}`
+
+  const configData = {
+    id: templateId, name: content.name, sourceUrl: url,
+    scrapedAt: new Date().toISOString(),
+    extracted: {
+      name: content.name, phone: content.phone, email: content.email,
+      address: content.address, businessHours: content.businessHours,
+      slogan: content.slogan, description: content.description,
+      menuItems: content.menuItems.length, color: content.primaryColor,
+      socialLinks: Object.keys(content.socialLinks).length,
+    },
+  }
+
+  const configJson = JSON.stringify(configData, null, 2)
+
+  await r2.put(`${scrapedPath}/config.json`, configJson)
+  await r2.put(`${scrapedPath}/index.html`, indexHtml)
+  await r2.put(`${scrapedPath}/menu.html`, menuHtml)
+  await r2.put(`${scrapedPath}/contact.html`, contactHtml)
+  await r2.put(`${scrapedPath}/style.css`, styleCss)
+
+  await r2.put(`${templatePath}/index.html`, indexHtml)
+  await r2.put(`${templatePath}/menu.html`, menuHtml)
+  await r2.put(`${templatePath}/contact.html`, contactHtml)
+  await r2.put(`${templatePath}/style.css`, styleCss)
+
+  await progress('progress', { step: 'save_db', message: '正在写入数据库...' })
+
+  try {
+    await env.CENTRAL_DB.prepare(
+      'INSERT OR REPLACE INTO templates (id, name, description, is_active, created_at, features) VALUES (?, ?, ?, 1, ?, ?)'
+    ).bind(
+      templateId, content.name, content.description.slice(0, 200),
+      new Date().toISOString(),
+      JSON.stringify({ sourceUrl: url, phone: content.phone, email: content.email, address: content.address })
+    ).run()
+  } catch {
+    console.error('Failed to insert template into DB')
+  }
+
+  await progress('progress', { step: 'done', message: '采集完成！正在刷新模板列表...' })
+
+  return {
+    templateId, name: content.name, phone: content.phone, email: content.email,
+    address: content.address, businessHours: content.businessHours,
+    description: content.description, slogan: content.slogan,
+    primaryColor: content.primaryColor, menuItems: content.menuItems,
+    socialLinks: content.socialLinks, pagesFound: pages.length,
+  }
+}
+
 export async function handleScrapeWebsite(request: Request, env: Env): Promise<Response> {
+  const accept = request.headers.get('Accept') || ''
+  const wantsSSE = accept.includes('text/event-stream')
+
   try {
     const body = await request.json() as { url: string }
     const { url } = body
@@ -509,80 +614,52 @@ export async function handleScrapeWebsite(request: Request, env: Env): Promise<R
       return errorResponse('请提供有效的 URL', 400)
     }
 
-    const { html: mainHtml, baseUrl } = await fetchPage(url)
-    const pages = await discoverLinkedPages(mainHtml, baseUrl)
-    const content = await extractContent(mainHtml, pages, baseUrl)
+    if (wantsSSE) {
+      const { readable, writable } = new TransformStream()
+      const writer = writable.getWriter()
+      const encoder = new TextEncoder()
 
-    const templateId = generateId()
-    const { indexHtml, menuHtml, contactHtml, styleCss } = generateTemplateHtml(content)
+      const progress: ProgressCallback = async (event, data) => {
+        await writeSSE(writer, encoder, event, data)
+      }
 
-    const r2 = env.TEMPLATES_R2
-    const scrapedPath = `scraped/${templateId}`
-    const templatePath = `templates/${templateId}`
+      runScrape(url, env, progress)
+        .then(async (result) => {
+          await writeSSE(writer, encoder, 'completed', result)
+          await writer.close()
+        })
+        .catch(async (e) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          await writeSSE(writer, encoder, 'error', { message: `采集失败: ${msg}` })
+          await writer.close()
+        })
 
-    const configData = {
-      id: templateId,
-      name: content.name,
-      sourceUrl: url,
-      scrapedAt: new Date().toISOString(),
-      extracted: {
-        name: content.name,
-        phone: content.phone,
-        email: content.email,
-        address: content.address,
-        businessHours: content.businessHours,
-        slogan: content.slogan,
-        description: content.description,
-        menuItems: content.menuItems.length,
-        color: content.primaryColor,
-        socialLinks: Object.keys(content.socialLinks).length,
-      },
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      })
     }
 
-    const configJson = JSON.stringify(configData, null, 2)
-
-    await r2.put(`${scrapedPath}/config.json`, configJson)
-    await r2.put(`${scrapedPath}/index.html`, indexHtml)
-    await r2.put(`${scrapedPath}/menu.html`, menuHtml)
-    await r2.put(`${scrapedPath}/contact.html`, contactHtml)
-    await r2.put(`${scrapedPath}/style.css`, styleCss)
-
-    await r2.put(`${templatePath}/index.html`, indexHtml)
-    await r2.put(`${templatePath}/menu.html`, menuHtml)
-    await r2.put(`${templatePath}/contact.html`, contactHtml)
-    await r2.put(`${templatePath}/style.css`, styleCss)
-
-    try {
-      await env.CENTRAL_DB.prepare(
-        'INSERT OR REPLACE INTO templates (id, name, description, is_active, created_at, features) VALUES (?, ?, ?, 1, ?, ?)'
-      ).bind(
-        templateId,
-        content.name,
-        content.description.slice(0, 200),
-        new Date().toISOString(),
-        JSON.stringify({ sourceUrl: url, phone: content.phone, email: content.email, address: content.address })
-      ).run()
-    } catch {
-      console.error('Failed to insert template into DB')
-    }
-
-    return jsonResponse({
-      success: true,
-      templateId,
-      name: content.name,
-      phone: content.phone,
-      email: content.email,
-      address: content.address,
-      businessHours: content.businessHours,
-      description: content.description,
-      slogan: content.slogan,
-      primaryColor: content.primaryColor,
-      menuItems: content.menuItems,
-      socialLinks: content.socialLinks,
-      pagesFound: pages.length,
-    })
+    const result = await runScrape(url, env, async () => {})
+    return jsonResponse({ success: true, ...result })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
+    if (wantsSSE) {
+      const { readable, writable } = new TransformStream()
+      const writer = writable.getWriter()
+      const encoder = new TextEncoder()
+      await writeSSE(writer, encoder, 'error', { message: `采集失败: ${msg}` })
+      await writer.close()
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      })
+    }
     return errorResponse(`采集失败: ${msg}`, 500)
   }
 }

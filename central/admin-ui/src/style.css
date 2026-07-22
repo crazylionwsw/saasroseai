@@ -656,6 +656,58 @@ select.form-control {
   to { transform: rotate(360deg); }
 }
 
+/* Scrape progress */
+.scrape-progress {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.scrape-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  animation: fadeIn 0.3s ease;
+}
+.scrape-step:last-child {
+  border-bottom: none;
+}
+.scrape-step .step-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  color: var(--primary);
+  font-weight: bold;
+}
+.scrape-step.completed .step-icon {
+  color: var(--green);
+}
+.scrape-step.error {
+  color: var(--red);
+}
+.scrape-step.error .step-icon {
+  color: var(--red);
+}
+.scrape-result {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  background: #fafbfc;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.scrape-result p {
+  margin: 3px 0;
+  font-size: 13px;
+  color: #555;
+}
+.scrape-result .badge {
+  font-size: 12px;
+  margin-left: 4px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   #sidebar {
