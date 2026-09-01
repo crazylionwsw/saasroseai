@@ -15,6 +15,7 @@ interface PendingOrder {
 interface ChatRoomState {
   merchantId: string
   customerId: string
+  sessionId?: string
   mode: 'ai' | 'human'
   assignedAgent?: string
   messages: Message[]
@@ -82,6 +83,17 @@ export class ChatRoom extends DurableObject<Env> {
 
     if (!this.state.customerId) {
       this.state.customerId = generateId('c_')
+      await this.ctx.storage.put('state', this.state)
+    }
+
+    if (!this.state.sessionId) {
+      this.state.sessionId = generateId('sess_')
+      try {
+        await this.env.MERCHANT_DB.prepare(
+          `INSERT INTO chat_sessions (id, merchant_id, customer_id, mode, status, started_at)
+           VALUES (?, ?, ?, ?, 'open', datetime('now'))`
+        ).bind(this.state.sessionId, this.state.merchantId, this.state.customerId, this.state.mode).run()
+      } catch {}
       await this.ctx.storage.put('state', this.state)
     }
 
@@ -402,7 +414,7 @@ export class ChatRoom extends DurableObject<Env> {
       } catch {}
     }
 
-    const sessionId = generateId('sess_')
+    const sessionId = this.state.sessionId || generateId('sess_')
     const stmts = this.state.messages.map(msg =>
       this.env.MERCHANT_DB.prepare(
         `INSERT INTO chat_messages (id, session_id, merchant_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)`
@@ -418,6 +430,23 @@ export class ChatRoom extends DurableObject<Env> {
     if (stmts.length > 0) {
       await this.env.MERCHANT_DB.batch(stmts)
     }
+
+    try {
+      await this.env.MERCHANT_DB.prepare(
+        `INSERT INTO chat_sessions (id, merchant_id, customer_id, mode, status, message_count, summary, started_at, closed_at)
+         VALUES (?, ?, ?, ?, 'closed', ?, ?, COALESCE((SELECT started_at FROM chat_sessions WHERE id = ?), datetime('now')), datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           status = 'closed', message_count = excluded.message_count, summary = excluded.summary, closed_at = excluded.closed_at`
+      ).bind(
+        sessionId,
+        this.state.merchantId,
+        this.state.customerId || null,
+        this.state.mode,
+        this.state.messages.length,
+        summary || null,
+        sessionId,
+      ).run()
+    } catch {}
 
     this.state.context = { chunks: [], documents: [] }
     await this.ctx.storage.put('state', this.state)

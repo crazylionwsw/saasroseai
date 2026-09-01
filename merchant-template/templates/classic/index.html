@@ -4,6 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{RESTAURANT_NAME}} - {{T:page_title_home}}</title>
+  <meta name="description" content="{{RESTAURANT_DESC_SHORT}}">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="{{CANONICAL_URL}}">
+  <meta property="og:type" content="restaurant">
+  <meta property="og:title" content="{{RESTAURANT_NAME}}">
+  <meta property="og:description" content="{{RESTAURANT_DESC_SHORT}}">
+  <meta property="og:image" content="{{COVER_URL}}">
+  <meta property="og:url" content="{{CANONICAL_URL}}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Restaurant",
+    "name": "{{RESTAURANT_NAME}}",
+    "description": "{{RESTAURANT_DESC}}",
+    "telephone": "{{PHONE}}",
+    "email": "{{EMAIL}}",
+    "address": "{{ADDRESS}}",
+    "openingHours": "{{BUSINESS_HOURS}}",
+    "servesCuisine": "{{T:cuisine_label}}",
+    "priceRange": "$$"
+  }
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>

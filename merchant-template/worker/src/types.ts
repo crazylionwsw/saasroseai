@@ -23,6 +23,10 @@ export interface MenuItem {
   id: string; name: string; description: string;
   price: number; image: string; category: string;
   tags: string[]; isAvailable: boolean;
+  vegetarian?: boolean;
+  vegan?: boolean;
+  spicyLevel?: number;
+  allergens?: string[];
   specifications?: { name: string; options: { label: string; priceDelta: number }[] }[];
 }
 

@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS merchant_info (
   language TEXT DEFAULT 'zh',
   currency_symbol TEXT DEFAULT '¥',
   tax_rate INTEGER DEFAULT 500,
+  drive_token_encrypted TEXT,
+  drive_folder_id TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -127,6 +129,20 @@ CREATE TABLE IF NOT EXISTS tax_rules (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_tax_rules_merchant ON tax_rules(merchant_id);
+
+-- Phase 8: AI Chat Sessions (TASK-040)
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  customer_id TEXT,
+  mode TEXT DEFAULT 'ai',
+  status TEXT DEFAULT 'open',
+  message_count INTEGER DEFAULT 0,
+  summary TEXT,
+  started_at TEXT DEFAULT (datetime('now')),
+  closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_merchant ON chat_sessions(merchant_id, started_at DESC);
 
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY,

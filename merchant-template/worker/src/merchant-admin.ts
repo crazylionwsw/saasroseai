@@ -61,3 +61,41 @@ export async function handleAnalyticsEvents(request: Request, env: Env): Promise
     return errorResponse('记录事件失败', 500, 500)
   }
 }
+
+export async function handleGetKnowledgeConfig(request: Request, env: Env): Promise<Response> {
+  try {
+    const row = await env.MERCHANT_DB.prepare(
+      'SELECT drive_folder_id FROM merchant_info WHERE id = ?'
+    ).bind(env.MERCHANT_ID).first<{ drive_folder_id: string | null }>()
+    return jsonResponse({
+      driveConfigured: !!(row?.drive_folder_id),
+      driveFolderId: row?.drive_folder_id || null,
+    })
+  } catch {
+    return errorResponse('获取知识库配置失败', 500, 500)
+  }
+}
+
+export async function handleUpdateKnowledgeConfig(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await request.json<{ driveTokenEncrypted?: string; driveFolderId?: string }>()
+    const updates: string[] = []
+    const values: any[] = []
+    if (body.driveTokenEncrypted !== undefined) {
+      updates.push('drive_token_encrypted = ?')
+      values.push(String(body.driveTokenEncrypted))
+    }
+    if (body.driveFolderId !== undefined) {
+      updates.push('drive_folder_id = ?')
+      values.push(String(body.driveFolderId))
+    }
+    if (updates.length === 0) return errorResponse('无更新字段', 400)
+    values.push(env.MERCHANT_ID)
+    await env.MERCHANT_DB.prepare(
+      `UPDATE merchant_info SET ${updates.join(', ')} WHERE id = ?`
+    ).bind(...values).run()
+    return jsonResponse({ success: true })
+  } catch {
+    return errorResponse('更新知识库配置失败', 500, 500)
+  }
+}

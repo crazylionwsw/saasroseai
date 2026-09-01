@@ -42,13 +42,18 @@ async function cfApiFetch(path: string, apiToken: string, options: RequestInit =
 interface TemplateFiles {
   'index.html'?: string
   'menu.html'?: string
+  'order.html'?: string
   'contact.html'?: string
+  'order-status.html'?: string
   'style.css'?: string
+  'app.js'?: string
+  'robots.txt'?: string
+  'sitemap.xml'?: string
 }
 
 async function getTemplateFiles(env: Env, templateId: string): Promise<TemplateFiles> {
   const files: TemplateFiles = {}
-  for (const name of ['index.html', 'menu.html', 'contact.html', 'style.css'] as const) {
+  for (const name of ['index.html', 'menu.html', 'order.html', 'contact.html', 'order-status.html', 'style.css', 'app.js', 'robots.txt', 'sitemap.xml'] as const) {
     const obj = await env.TEMPLATES_R2.get(`templates/${templateId}/${name}`)
     if (obj) {
       files[name] = await obj.text()
@@ -164,6 +169,7 @@ export async function handleDeployToMerchantCF(request: Request, env: Env, merch
       LANG: merchantLang,
       CURRENCY_SYMBOL: currencySymbol,
       API_BASE: apiBase,
+      CANONICAL_URL: `https://storefront-${merchantId}.pages.dev`,
       TRANSLATIONS_JSON: translationsJson,
       ...langSelectedVars,
     }

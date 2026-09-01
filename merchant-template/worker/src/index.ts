@@ -8,9 +8,10 @@ import { handleGenerateQr, handleVerifyQr } from './qr'
 import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
 import { getNotifierStub, notifyOrderChanged } from './notify-do'
 import { handleGetTaxRules, handleUpdateTaxRules } from './tax'
+import { syncMerchantKnowledge } from './knowledge-sync'
 import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
-import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents } from './merchant-admin'
+import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents, handleGetKnowledgeConfig, handleUpdateKnowledgeConfig } from './merchant-admin'
 import { handleListStores, handleCreateStore, handleUpdateStore, handleDeleteStore, handleStoreAnalytics } from './stores'
 import { handleListDeliveries, handleExportDelivery, handleListInventory, handleUpdateInventory, handleDeleteInventory, handleListSuppliers, handleCreateSupplier } from './delivery'
 import { jsonResponse, errorResponse } from './utils'
@@ -59,6 +60,10 @@ router.post('/api/merchant/events', handleAnalyticsEvents)
 router.get('/api/merchant/tax', handleGetTaxRules)
 router.put('/api/merchant/tax', handleUpdateTaxRules)
 
+router.get('/api/merchant/knowledge', handleGetKnowledgeConfig)
+router.put('/api/merchant/knowledge', handleUpdateKnowledgeConfig)
+router.post('/api/merchant/knowledge/sync', (request: Request, env: Env) => handleSyncKnowledgeNow(request, env))
+
 router.get('/api/stores', handleListStores)
 router.post('/api/stores', handleCreateStore)
 router.put('/api/stores/:storeId', handleUpdateStore)
@@ -93,6 +98,34 @@ export default {
     }
     return router.fetch(request, env, ctx)
   },
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runKnowledgeSync(env))
+  },
+}
+
+async function runKnowledgeSync(env: Env): Promise<{ success: boolean; stats?: any; error?: string }> {
+  try {
+    const row = await env.MERCHANT_DB.prepare(
+      'SELECT drive_token_encrypted, drive_folder_id FROM merchant_info WHERE id = ?'
+    ).bind(env.MERCHANT_ID).first<{ drive_token_encrypted: string | null; drive_folder_id: string | null }>()
+    if (!row?.drive_token_encrypted || !row.drive_folder_id) {
+      return { success: false, error: '未配置 Google Drive' }
+    }
+    const subEnv = {
+      ...env,
+      DRIVE_TOKEN_ENCRYPTED: row.drive_token_encrypted,
+      DRIVE_FOLDER_ID: row.drive_folder_id,
+    } as any
+    const stats = await syncMerchantKnowledge(env.MERCHANT_ID, subEnv)
+    return { success: true, stats }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+async function handleSyncKnowledgeNow(_request: Request, env: Env): Promise<Response> {
+  const result = await runKnowledgeSync(env)
+  return jsonResponse(result)
 }
 
 async function handleUnauthenticatedRequest(request: Request, env: Env): Promise<Response> {

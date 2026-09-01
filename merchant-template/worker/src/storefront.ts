@@ -53,10 +53,12 @@ async function renderTemplate(html: string, env: Env, merchantInfo: any): Promis
 
   let result = html
   result = renderLangSelected(result, detectedLang)
+  const canonicalUrl = merchantInfo.canonicalUrl || `https://${merchantInfo.id}.pages.dev`
   result = result
     .replace(/\{\{LANG\}\}/g, detectedLang)
     .replace(/\{\{CURRENCY_SYMBOL\}\}/g, currencySymbol)
     .replace(/\{\{API_BASE\}\}/g, merchantInfo.apiBase || '')
+    .replace(/\{\{CANONICAL_URL\}\}/g, canonicalUrl)
     .replace(/\{\{TRANSLATIONS_JSON\}\}/g, JSON.stringify(translations).replace(/'/g, "\\'").replace(/</g, '\\u003c'))
     .replace(/\{\{RESTAURANT_NAME\}\}/g, merchantInfo.name || '')
     .replace(/\{\{RESTAURANT_SLOGAN\}\}/g, merchantInfo.slogan || '')
