@@ -7,7 +7,7 @@
     "dev:central-api": "wrangler dev --config central/api/wrangler.jsonc",
     "dev:central-ui": "wrangler pages dev central/admin-ui --port 8788",
     "deploy:central-api": "wrangler deploy --config central/api/wrangler.jsonc",
-    "deploy:central-ui": "wrangler pages deploy central/admin-ui --project-name rose-saas-admin",
+    "deploy:central-ui": "wrangler pages deploy central/admin-ui/src --project-name rose-saas-admin --branch main",
     "test": "vitest run --config tests/vitest.config.ts",
     "test:watch": "vitest --config tests/vitest.config.ts",
     "typecheck": "tsc --noEmit"
