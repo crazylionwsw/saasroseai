@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS orders (
   order_number TEXT,
   order_type TEXT DEFAULT 'pickup' CHECK(order_type IN ('dine_in','pickup')),
   table_id TEXT,
+  idempotency_key TEXT,
   customer_name TEXT,
   customer_phone TEXT,
   customer_address TEXT,
@@ -166,6 +167,7 @@ CREATE TABLE IF NOT EXISTS call_transfers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_merchant ON orders(merchant_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_call_records_merchant ON call_records(merchant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_knowledge_merchant ON knowledge_docs(merchant_id);

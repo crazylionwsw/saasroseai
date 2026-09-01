@@ -18,6 +18,18 @@ export async function handleCreateOrder(request: Request, env: Env): Promise<Res
       items: { id: string | number; qty: number; modifiers?: string[] }[];
     }>()
 
+    // Idempotency (TASK-020): a repeated request with the same key returns the
+    // original order instead of creating a duplicate.
+    const idempotencyKey = (request.headers.get('Idempotency-Key') || '').trim().slice(0, 128)
+    if (idempotencyKey) {
+      const existing = await env.MERCHANT_DB.prepare(
+        'SELECT * FROM orders WHERE idempotency_key = ? AND merchant_id = ?'
+      ).bind(idempotencyKey, env.MERCHANT_ID).first<Order | null>()
+      if (existing) {
+        return jsonResponse(existing, 200)
+      }
+    }
+
     const items = body.items
     if (!Array.isArray(items) || items.length === 0) {
       return errorResponse('缺少菜品 (items)', 400)
@@ -53,23 +65,34 @@ export async function handleCreateOrder(request: Request, env: Env): Promise<Res
     const lineJson = JSON.stringify(quote.lines)
     const itemNames = quote.lines.map((l) => `${l.name}x${l.qty}`).join(', ')
 
-    await env.MERCHANT_DB.prepare(
-      `INSERT INTO orders (
-         id, merchant_id, order_number, order_type, table_id,
-         customer_name, customer_phone, customer_address, items, note,
-         subtotal, total,
-         subtotal_cents, tax_cents, tip_cents, total_cents, currency,
-         status, payment_status, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      orderId, env.MERCHANT_ID, orderId, orderType, tableId,
-      body.customerName || null, body.customerPhone || null, body.customerAddress || null, lineJson, body.note || null,
-      quote.subtotalCents / 100, quote.totalCents / 100,
-      quote.subtotalCents, quote.taxCents, quote.tipCents, quote.totalCents, quote.currency,
-      requiresPayment ? 'draft' : 'paid',
-      'not_required',
-      now, now
-    ).run()
+    try {
+      await env.MERCHANT_DB.prepare(
+        `INSERT INTO orders (
+           id, merchant_id, order_number, order_type, table_id, idempotency_key,
+           customer_name, customer_phone, customer_address, items, note,
+           subtotal, total,
+           subtotal_cents, tax_cents, tip_cents, total_cents, currency,
+           status, payment_status, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        orderId, env.MERCHANT_ID, orderId, orderType, tableId, idempotencyKey || null,
+        body.customerName || null, body.customerPhone || null, body.customerAddress || null, lineJson, body.note || null,
+        quote.subtotalCents / 100, quote.totalCents / 100,
+        quote.subtotalCents, quote.taxCents, quote.tipCents, quote.totalCents, quote.currency,
+        requiresPayment ? 'draft' : 'paid',
+        'not_required',
+        now, now
+      ).run()
+    } catch (insertErr) {
+      // Unique-constraint race on idempotency_key: return the already-created order.
+      if (idempotencyKey) {
+        const raced = await env.MERCHANT_DB.prepare(
+          'SELECT * FROM orders WHERE idempotency_key = ? AND merchant_id = ?'
+        ).bind(idempotencyKey, env.MERCHANT_ID).first<Order | null>()
+        if (raced) return jsonResponse(raced, 200)
+      }
+      throw insertErr
+    }
 
     return jsonResponse({
       id: orderId,

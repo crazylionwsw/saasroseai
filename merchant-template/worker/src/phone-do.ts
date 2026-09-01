@@ -462,7 +462,10 @@ Keep responses very concise and conversational — this is a phone call. Speak n
     try {
       const embedding = await this.env.AI.run('@cf/baai/bge-small-en-v1.5', { text: [query] })
       const vector = (embedding as { data: number[][] }).data[0]
-      const result = await this.env.KNOWLEDGE.query(vector, { topK: 5 })
+      const result = await this.env.KNOWLEDGE.query(vector, {
+        topK: 5,
+        filter: { merchantId: this.env.MERCHANT_ID },
+      })
       const chunks = new Set<string>()
       for (const match of result.matches) {
         if (match.metadata?.text) {

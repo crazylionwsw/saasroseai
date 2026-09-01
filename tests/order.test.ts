@@ -23,6 +23,9 @@ function createMockEnv() {
           if (sql.includes('SELECT * FROM orders WHERE id = ?')) {
             return orders.find((o) => o.id === args[0]) || null
           }
+          if (sql.includes('idempotency_key = ? AND merchant_id = ?')) {
+            return orders.find((o) => o.idempotency_key === args[0] && o.merchant_id === args[1]) || null
+          }
           if (sql.includes('FROM orders WHERE id = ? AND merchant_id = ?')) {
             return orders.find((o) => o.id === args[0] && o.merchant_id === args[1]) || null
           }
@@ -32,11 +35,12 @@ function createMockEnv() {
           if (sql.includes('INSERT INTO orders')) {
             orders.push({
               id: args[0], merchant_id: args[1], order_number: args[2], order_type: args[3], table_id: args[4],
-              customer_name: args[5], customer_phone: args[6], customer_address: args[7],
-              items: args[8], note: args[9], subtotal: args[10], total: args[11],
-              subtotal_cents: args[12], tax_cents: args[13], tip_cents: args[14], total_cents: args[15],
-              currency: args[16], status: args[17], payment_status: args[18],
-              created_at: args[19], updated_at: args[20],
+              idempotency_key: args[5],
+              customer_name: args[6], customer_phone: args[7], customer_address: args[8],
+              items: args[9], note: args[10], subtotal: args[11], total: args[12],
+              subtotal_cents: args[13], tax_cents: args[14], tip_cents: args[15], total_cents: args[16],
+              currency: args[17], status: args[18], payment_status: args[19],
+              created_at: args[20], updated_at: args[21],
             })
             return { success: true, meta: { changes: 1 } }
           }
@@ -148,6 +152,48 @@ describe('Order System - Server-Side Pricing', () => {
     })
     const resp = await handleCreateOrder(req, env)
     expect(resp.status).toBe(400)
+  })
+})
+
+describe('Order Idempotency (TASK-020)', () => {
+  it('returns the same order for a repeated Idempotency-Key', async () => {
+    const env = createMockEnv()
+    const { handleCreateOrder } = await import('../merchant-template/worker/src/order')
+    const build = () =>
+      new Request('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'order-key-123' },
+        body: JSON.stringify({
+          orderType: 'pickup',
+          customerName: '李四',
+          items: [{ id: 'item1', qty: 1 }],
+        }),
+      })
+
+    const first = await handleCreateOrder(build(), env)
+    const firstData: any = await first.json()
+    expect(first.status).toBe(201)
+
+    const second = await handleCreateOrder(build(), env)
+    const secondData: any = await second.json()
+    expect(second.status).toBe(200)
+    expect(secondData.id).toBe(firstData.id)
+    expect(env._orders.length).toBe(1)
+  })
+
+  it('creates distinct orders for distinct keys', async () => {
+    const env = createMockEnv()
+    const { handleCreateOrder } = await import('../merchant-template/worker/src/order')
+    const make = (key: string) =>
+      new Request('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+        body: JSON.stringify({ orderType: 'pickup', items: [{ id: 'item1', qty: 1 }] }),
+      })
+
+    await handleCreateOrder(make('k1'), env)
+    await handleCreateOrder(make('k2'), env)
+    expect(env._orders.length).toBe(2)
   })
 })
 
