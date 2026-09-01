@@ -96,6 +96,27 @@ CREATE TABLE IF NOT EXISTS refunds (
 );
 CREATE INDEX IF NOT EXISTS idx_refunds_payment ON refunds(payment_id);
 
+-- Phase 3: Server-side Cart Domain
+CREATE TABLE IF NOT EXISTS carts (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  status TEXT DEFAULT 'open',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_carts_merchant ON carts(merchant_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS cart_items (
+  id TEXT PRIMARY KEY,
+  cart_id TEXT NOT NULL,
+  merchant_id TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  qty INTEGER NOT NULL,
+  modifiers TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cart_items_cart ON cart_items(cart_id);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,

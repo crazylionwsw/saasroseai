@@ -2,9 +2,10 @@ import { AutoRouter, cors } from 'itty-router'
 import { Env } from './types'
 import { verifyMerchant } from './auth-middleware'
 import { handleGenerateSite, handleGetTemplateList, handleGeneratePreview } from './storefront'
-import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderStatus, handleGetMenu, handleCalculateQuote } from './order'
+import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderStatus, handleGetMenu } from './order'
 import { handleCreatePayment, handleStripeWebhook, handleQueryPayment } from './payment'
 import { handleGenerateQr, handleVerifyQr } from './qr'
+import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
 import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
 import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents } from './merchant-admin'
@@ -28,7 +29,12 @@ router.get('/api/orders', handleListOrders)
 router.get('/api/orders/:orderId', handleGetOrder)
 router.put('/api/orders/:orderId/status', handleUpdateOrderStatus)
 
-router.post('/api/cart/calculate', handleCalculateQuote)
+router.post('/api/cart', handleCreateCart)
+router.get('/api/cart/:cartId', handleGetCart)
+router.post('/api/cart/items', handleAddCartItem)
+router.patch('/api/cart/items/:lineId', handleUpdateCartItem)
+router.delete('/api/cart/items/:lineId', handleRemoveCartItem)
+router.post('/api/cart/calculate', handleCalculateCart)
 
 router.post('/api/payments/create', handleCreatePayment)
 router.get('/api/payments/:orderId', handleQueryPayment)

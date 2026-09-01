@@ -4,133 +4,123 @@ import { calculateQuote } from './pricing'
 import { canTransitionOrder, orderTransitionError, isInternalOrderStatus } from './order-state'
 import { verifyTableToken } from './qr'
 
-export async function handleCreateOrder(request: Request, env: Env): Promise<Response> {
-  try {
-    const body = await request.json<{
-      orderType?: string;
-      tableId?: string;
-      qrToken?: string;
-      customerName?: string;
-      customerPhone?: string;
-      customerAddress?: string;
-      note?: string;
-      tipPercent?: number;
-      items: { id: string | number; qty: number; modifiers?: string[] }[];
-    }>()
+export interface PlaceOrderInput {
+  orderType?: string;
+  tableId?: string;
+  qrToken?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  note?: string;
+  tipPercent?: number;
+  items: { id: string | number; qty: number; modifiers?: string[] }[];
+  idempotencyKey?: string;
+}
 
-    // Idempotency (TASK-020): a repeated request with the same key returns the
-    // original order instead of creating a duplicate.
-    const idempotencyKey = (request.headers.get('Idempotency-Key') || '').trim().slice(0, 128)
+export async function placeOrder(env: Env, input: PlaceOrderInput): Promise<{ payload: any; status: number }> {
+  const items = input.items
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('缺少菜品 (items)')
+  }
+
+  const orderType: OrderType = input.orderType === 'dine_in' ? 'dine_in' : 'pickup'
+
+  let tableId = input.tableId || null
+  if (input.qrToken) {
+    const verified = await verifyTableToken(env, input.qrToken)
+    if (!verified) {
+      throw new Error('二维码无效或已过期')
+    }
+    tableId = verified.t || tableId
+  }
+  if (orderType === 'dine_in' && !tableId) {
+    throw new Error('堂食订单缺少桌号')
+  }
+
+  const idempotencyKey = (input.idempotencyKey || '').trim().slice(0, 128)
+  if (idempotencyKey) {
+    const existing = await env.MERCHANT_DB.prepare(
+      'SELECT * FROM orders WHERE idempotency_key = ? AND merchant_id = ?'
+    ).bind(idempotencyKey, env.MERCHANT_ID).first<Order | null>()
+    if (existing) {
+      return { payload: existing, status: 200 }
+    }
+  }
+
+  const quote = await calculateQuote(env, items, input.tipPercent)
+  const now = new Date().toISOString()
+  const orderId = generateOrderId()
+
+  let paymentEnabled = false
+  try {
+    const info = await env.MERCHANT_DB.prepare(
+      'SELECT enable_payment, enable_ordering FROM merchant_info WHERE id = ?'
+    ).bind(env.MERCHANT_ID).first<{ enable_payment: number | null; enable_ordering: number | null }>()
+    paymentEnabled = (info?.enable_payment ?? 0) === 1
+  } catch {}
+  const requiresPayment = quote.totalCents > 0 && paymentEnabled
+
+  const lineJson = JSON.stringify(quote.lines)
+  const itemNames = quote.lines.map((l) => `${l.name}x${l.qty}`).join(', ')
+
+  try {
+    await env.MERCHANT_DB.prepare(
+      `INSERT INTO orders (
+         id, merchant_id, order_number, order_type, table_id, idempotency_key,
+         customer_name, customer_phone, customer_address, items, note,
+         subtotal, total,
+         subtotal_cents, tax_cents, tip_cents, total_cents, currency,
+         status, payment_status, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      orderId, env.MERCHANT_ID, orderId, orderType, tableId, idempotencyKey || null,
+      input.customerName || null, input.customerPhone || null, input.customerAddress || null, lineJson, input.note || null,
+      quote.subtotalCents / 100, quote.totalCents / 100,
+      quote.subtotalCents, quote.taxCents, quote.tipCents, quote.totalCents, quote.currency,
+      requiresPayment ? 'draft' : 'paid',
+      'not_required',
+      now, now
+    ).run()
+  } catch (insertErr) {
+    // Unique-constraint race on idempotency_key: return the already-created order.
     if (idempotencyKey) {
-      const existing = await env.MERCHANT_DB.prepare(
+      const raced = await env.MERCHANT_DB.prepare(
         'SELECT * FROM orders WHERE idempotency_key = ? AND merchant_id = ?'
       ).bind(idempotencyKey, env.MERCHANT_ID).first<Order | null>()
-      if (existing) {
-        return jsonResponse(existing, 200)
-      }
+      if (raced) return { payload: raced, status: 200 }
     }
+    throw insertErr
+  }
 
-    const items = body.items
-    if (!Array.isArray(items) || items.length === 0) {
-      return errorResponse('缺少菜品 (items)', 400)
-    }
+  const payload = {
+    id: orderId,
+    orderId,
+    orderType,
+    tableId,
+    items: quote.lines,
+    itemNames,
+    subtotalCents: quote.subtotalCents,
+    taxCents: quote.taxCents,
+    tipCents: quote.tipCents,
+    totalCents: quote.totalCents,
+    currency: quote.currency,
+    status: requiresPayment ? 'draft' : 'paid',
+    paymentStatus: 'not_required',
+    requiresPayment,
+    createdAt: now,
+  }
+  return { payload, status: 201 }
+}
 
-    const orderType: OrderType = body.orderType === 'dine_in' ? 'dine_in' : 'pickup'
-
-    let tableId = body.tableId || null
-    if (body.qrToken) {
-      const verified = await verifyTableToken(env, body.qrToken)
-      if (!verified) {
-        return errorResponse('二维码无效或已过期', 400)
-      }
-      tableId = verified.t || tableId
-    }
-    if (orderType === 'dine_in' && !tableId) {
-      return errorResponse('堂食订单缺少桌号', 400)
-    }
-
-    const quote = await calculateQuote(env, items, body.tipPercent)
-    const now = new Date().toISOString()
-    const orderId = generateOrderId()
-
-    let paymentEnabled = false
-    try {
-      const info = await env.MERCHANT_DB.prepare(
-        'SELECT enable_payment, enable_ordering FROM merchant_info WHERE id = ?'
-      ).bind(env.MERCHANT_ID).first<{ enable_payment: number | null; enable_ordering: number | null }>()
-      paymentEnabled = (info?.enable_payment ?? 0) === 1
-    } catch {}
-    const requiresPayment = quote.totalCents > 0 && paymentEnabled
-
-    const lineJson = JSON.stringify(quote.lines)
-    const itemNames = quote.lines.map((l) => `${l.name}x${l.qty}`).join(', ')
-
-    try {
-      await env.MERCHANT_DB.prepare(
-        `INSERT INTO orders (
-           id, merchant_id, order_number, order_type, table_id, idempotency_key,
-           customer_name, customer_phone, customer_address, items, note,
-           subtotal, total,
-           subtotal_cents, tax_cents, tip_cents, total_cents, currency,
-           status, payment_status, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(
-        orderId, env.MERCHANT_ID, orderId, orderType, tableId, idempotencyKey || null,
-        body.customerName || null, body.customerPhone || null, body.customerAddress || null, lineJson, body.note || null,
-        quote.subtotalCents / 100, quote.totalCents / 100,
-        quote.subtotalCents, quote.taxCents, quote.tipCents, quote.totalCents, quote.currency,
-        requiresPayment ? 'draft' : 'paid',
-        'not_required',
-        now, now
-      ).run()
-    } catch (insertErr) {
-      // Unique-constraint race on idempotency_key: return the already-created order.
-      if (idempotencyKey) {
-        const raced = await env.MERCHANT_DB.prepare(
-          'SELECT * FROM orders WHERE idempotency_key = ? AND merchant_id = ?'
-        ).bind(idempotencyKey, env.MERCHANT_ID).first<Order | null>()
-        if (raced) return jsonResponse(raced, 200)
-      }
-      throw insertErr
-    }
-
-    return jsonResponse({
-      id: orderId,
-      orderId,
-      orderType,
-      tableId,
-      items: quote.lines,
-      itemNames,
-      subtotalCents: quote.subtotalCents,
-      taxCents: quote.taxCents,
-      tipCents: quote.tipCents,
-      totalCents: quote.totalCents,
-      currency: quote.currency,
-      status: requiresPayment ? 'draft' : 'paid',
-      paymentStatus: 'not_required',
-      requiresPayment,
-      createdAt: now,
-    }, 201)
+export async function handleCreateOrder(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await request.json<PlaceOrderInput>()
+    const idempotencyKey = (request.headers.get('Idempotency-Key') || '').trim().slice(0, 128)
+    const { payload, status } = await placeOrder(env, { ...body, idempotencyKey })
+    return jsonResponse(payload, status)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return errorResponse(`创建订单失败: ${msg}`, 400)
-  }
-}
-
-export async function handleCalculateQuote(request: Request, env: Env): Promise<Response> {
-  try {
-    const body = await request.json<{
-      items: { id: string | number; qty: number; modifiers?: string[] }[];
-      tipPercent?: number;
-    }>()
-    if (!Array.isArray(body.items) || body.items.length === 0) {
-      return errorResponse('缺少菜品 (items)', 400)
-    }
-    const quote = await calculateQuote(env, body.items, body.tipPercent)
-    return jsonResponse(quote)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return errorResponse(`价格计算失败: ${msg}`, 400)
   }
 }
 
