@@ -174,6 +174,10 @@ function dashboardHtml(merchantName: string, lang: string): string {
       title: '商户后台', navOverview: '总览', navOrders: '订单', navMenu: '菜单',
       navAnalytics: '数据分析', navStores: '门店', navInventory: '库存',
       navDeliveries: '配送', navSuppliers: '供应商', navSettings: '设置',
+      categoryAdd: '添加分类', categoryRename: '重命名分类', categoryDelete: '删除分类',
+      itemAdd: '添加菜品', itemDelete: '删除菜品', save: '保存', saved: '已保存',
+      settingsHours: '营业时间', settingsTax: '税率', settingsOrdering: '启用点餐',
+      settingsPayment: '启用支付', settingsChat: '启用客服', settingsPhone: '启用电话',
       totalOrders: '总订单', todayOrders: '今日订单', monthlyOrders: '本月订单',
       totalRevenue: '总收入', todayRevenue: '今日收入', monthlyRevenue: '本月收入',
       pendingOrders: '待处理', recentOrders: '最近订单', topItems: '热销菜品',
@@ -185,7 +189,12 @@ function dashboardHtml(merchantName: string, lang: string): string {
       title: 'Merchant Dashboard', navOverview: 'Overview', navOrders: 'Orders',
       navMenu: 'Menu', navAnalytics: 'Analytics', navStores: 'Stores',
       navInventory: 'Inventory', navDeliveries: 'Deliveries', navSuppliers: 'Suppliers',
-      navSettings: 'Settings', totalOrders: 'Total Orders', todayOrders: 'Today',
+      navSettings: 'Settings', categoryAdd: 'Add Category', categoryRename: 'Rename Category',
+      categoryDelete: 'Delete Category', itemAdd: 'Add Item', itemDelete: 'Delete Item',
+      save: 'Save', saved: 'Saved', settingsHours: 'Business Hours', settingsTax: 'Tax',
+      settingsOrdering: 'Enable Ordering', settingsPayment: 'Enable Payment',
+      settingsChat: 'Enable Chat', settingsPhone: 'Enable Phone',
+      totalOrders: 'Total Orders', todayOrders: 'Today',
       monthlyOrders: 'This Month', totalRevenue: 'Total Revenue', todayRevenue: 'Today',
       monthlyRevenue: 'This Month', pendingOrders: 'Pending', recentOrders: 'Recent Orders',
       topItems: 'Top Items', salesTrend: 'Sales Trend', orderId: 'Order #',
@@ -197,7 +206,12 @@ function dashboardHtml(merchantName: string, lang: string): string {
       title: 'Tableau de Bord', navOverview: 'Aperçu', navOrders: 'Commandes',
       navMenu: 'Menu', navAnalytics: 'Analytique', navStores: 'Magasins',
       navInventory: 'Inventaire', navDeliveries: 'Livraisons', navSuppliers: 'Fournisseurs',
-      navSettings: 'Paramètres', totalOrders: 'Total Commandes', todayOrders: 'Aujourd\'hui',
+      navSettings: 'Paramètres', categoryAdd: 'Ajouter Catégorie', categoryRename: 'Renommer',
+      categoryDelete: 'Supprimer', itemAdd: 'Ajouter Article', itemDelete: 'Supprimer',
+      save: 'Enregistrer', saved: 'Enregistré', settingsHours: 'Horaires', settingsTax: 'Taxes',
+      settingsOrdering: 'Activer Commande', settingsPayment: 'Activer Paiement',
+      settingsChat: 'Activer Chat', settingsPhone: 'Activer Téléphone',
+      totalOrders: 'Total Commandes', todayOrders: 'Aujourd\'hui',
       monthlyOrders: 'Ce Mois', totalRevenue: 'Revenu Total', todayRevenue: 'Aujourd\'hui',
       monthlyRevenue: 'Ce Mois', pendingOrders: 'En Attente', recentOrders: 'Commandes Récentes',
       topItems: 'Meilleures Ventes', salesTrend: 'Tendance', orderId: 'Commande #',
@@ -261,6 +275,7 @@ select{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.85re
   <a href="#" data-page="inventory">${L('navInventory')}</a>
   <a href="#" data-page="deliveries">${L('navDeliveries')}</a>
   <a href="#" data-page="suppliers">${L('navSuppliers')}</a>
+  <a href="#" data-page="settings">${L('navSettings')}</a>
 </div>
 <div class="main" id="app">
   <div class="topbar"><h1 id="pageTitle">${L('navOverview')}</h1><div id="topActions"></div></div>
@@ -304,16 +319,101 @@ function tableHtml(orders){
 
 async function exportCSV(){window.open(API+'/api/deliveries/export?format=csv&days=7')}
 
+// Menu management
+let menuState=[]
 async function renderMenu(){
   const m=await api('/api/menu')
-  const cats=JSON.stringify(m.categories||[],null,2)
+  menuState=(m.categories||[]).map(c=>({name:c.name||'未命名',items:(c.items||[]).map(it=>({id:String(it.id),name:it.name||'',price:it.price!=null?Number(it.price):0,description:it.description||'',isAvailable:it.isAvailable!==false}))}))
+  renderMenuEditor()
+}
+function renderMenuEditor(){
   document.getElementById('content').innerHTML=\`
     <div class="section"><h2>\${t('navMenu')}</h2>
-    <textarea id="menuEditor" style="width:100%;min-height:400px;font-family:monospace;font-size:0.85rem;padding:12px;border:1px solid #ddd;border-radius:8px">\${cats}</textarea>
-    <div style="margin-top:10px"><button class="btn btn-primary" onclick="saveMenu()">${L('navSettings')}</button></div></div>
+    <div style="margin-bottom:12px;display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" onclick="addCategory()">+ ${L('categoryAdd')}</button>
+      <button class="btn btn-success btn-sm" onclick="saveMenu()">💾 ${L('save')}</button>
+    </div>
+    <div id="menuEditorRoot">\${renderCategories()}</div>
   \`
 }
-window.saveMenu=async function(){const cats=JSON.parse(document.getElementById('menuEditor').value);await api('/api/merchant/menu',{method:'PUT',body:JSON.stringify({categories:cats})});alert('Saved!')}
+function renderCategories(){
+  if(!menuState.length)return '<p style="color:#999">暂无分类，点击「+ 添加分类」创建。</p>'
+  return menuState.map((c,ci)=>\`
+    <div style="background:#fff;border:1px solid #eee;border-radius:8px;margin-bottom:12px;padding:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <strong>\${esc(c.name)||'未命名'}</strong>
+        <button class="btn btn-sm btn-secondary" onclick="renameCategory(\${ci})">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCategory(\${ci})">🗑</button>
+        <button class="btn btn-sm btn-primary" onclick="addItem(\${ci})">+ ${L('itemAdd')}</button>
+      </div>
+      \${(c.items.length?c.items.map((it,ii)=>renderItem(ci,ii,it)).join(''):'<p style="color:#999;font-size:0.82rem">暂无菜品</p>')}
+    </div>\`).join('')
+}
+function renderItem(ci,ii,it){
+  return \`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f2f2f2">
+      <input type="checkbox" \${it.isAvailable?'checked':''} onchange="toggleItem(\${ci},\${ii})" title="available">
+      <input value="\${esc(it.name)}" placeholder="菜名" style="flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" onchange="updateItem(\${ci},\${ii},'name',this.value)">
+      <input type="number" step="0.01" value="\${it.price}" placeholder="价格" style="width:90px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem" onchange="updateItem(\${ci},\${ii},'price',this.value)">
+      <button class="btn btn-sm btn-danger" onclick="deleteItem(\${ci},\${ii})">🗑</button>
+    </div>\`
+}
+window.addCategory=function(){const n=prompt('${L('categoryAdd')}:');if(!n)return;menuState.push({name:n,items:[]});renderMenuEditor()}
+window.renameCategory=function(ci){const n=prompt('${L('categoryRename')}:',menuState[ci].name);if(!n)return;menuState[ci].name=n;renderMenuEditor()}
+window.deleteCategory=function(ci){if(!confirm('${L('categoryDelete')}?'))return;menuState.splice(ci,1);renderMenuEditor()}
+window.addItem=function(ci){const n=prompt('${L('itemAdd')}:');if(!n)return;menuState[ci].items.push({id:'it_'+Date.now(),name:n,price:0,description:'',isAvailable:true});renderMenuEditor()}
+window.updateItem=function(ci,ii,field,val){menuState[ci].items[ii][field]=field==='price'?parseFloat(val)||0:val}
+window.toggleItem=function(ci,ii){menuState[ci].items[ii].isAvailable=!menuState[ci].items[ii].isAvailable}
+window.deleteItem=function(ci,ii){if(!confirm('${L('itemDelete')}?'))return;menuState[ci].items.splice(ii,1);renderMenuEditor()}
+window.saveMenu=async function(){
+  const cats=menuState.map(c=>({name:c.name,items:c.items.map(it=>({id:it.id,name:it.name,price:it.price,description:it.description,isAvailable:it.isAvailable}))}))
+  await api('/api/merchant/menu',{method:'PUT',body:JSON.stringify({categories:cats})})
+  alert('${L('saved')}')
+}
+
+// Settings
+async function renderSettings(){
+  const[p,t]=await Promise.all([api('/api/merchant/profile'),api('/api/merchant/tax')])
+  const rules=(t.rules||[]).map(r=>r.tax_code+':'+(Number(r.rate_bp)/100).toFixed(2)+'%').join(', ')
+  document.getElementById('content').innerHTML=\`
+    <div class="section"><h2>\${t('navSettings')}</h2></div>
+    <div class="stats">
+      <div class="stat-card"><div class="label">${L('settingsHours')}</div><input id="setHours" value="\${esc(p.business_hours||'')}" style="width:100%;margin-top:6px;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem"></div>
+      <div class="stat-card"><div class="label">${L('settingsTax')} <small>(\${rules||'5.00%'})</small></div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <input id="setTaxCode" placeholder="GST/PST/HST" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem">
+          <input id="setTaxRate" type="number" step="0.01" placeholder="%" style="width:70px;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem">
+          <button class="btn btn-sm btn-primary" onclick="addTaxRule()">+</button>
+        </div>
+        <div id="taxRuleList" style="margin-top:6px;font-size:0.82rem;color:#555">\${(t.rules||[]).map(r=>'<span style="display:inline-block;background:#f0f2f5;padding:2px 8px;border-radius:10px;margin:2px">'+r.tax_code+' '+(Number(r.rate_bp)/100).toFixed(2)+'% ✕</span>').join('')}</div>
+      </div>
+    </div>
+    <div class="stats">
+      \${[['enable_ordering','settingsOrdering'],['enable_payment','settingsPayment'],['enable_chat','settingsChat'],['enable_phone','settingsPhone']].map(([k,label])=>\`
+        <div class="stat-card"><label style="display:flex;align-items:center;gap:8px;font-size:0.85rem"><input type="checkbox" id="set_\${k}" \${p[k]===1?'checked':''}> \${t(label)}</label></div>\`).join('')}
+    </div>
+    <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveSettings()">💾 ${L('save')}</button></div>
+  \`
+}
+window.addTaxRule=function(){document.getElementById('taxRuleList').insertAdjacentHTML('beforeend','<span style="display:inline-block;background:#e6f4ff;padding:2px 8px;border-radius:10px;margin:2px">'+document.getElementById('setTaxCode').value.toUpperCase()+' '+document.getElementById('setTaxRate').value+'% ✕</span>')}
+window.saveSettings=async function(){
+  await api('/api/merchant/profile',{method:'PUT',body:JSON.stringify({
+    business_hours:document.getElementById('setHours').value,
+    enable_ordering:document.getElementById('set_enable_ordering').checked?1:0,
+    enable_payment:document.getElementById('set_enable_payment').checked?1:0,
+    enable_chat:document.getElementById('set_enable_chat').checked?1:0,
+    enable_phone:document.getElementById('set_enable_phone').checked?1:0
+  })})
+  const rules=[]
+  document.querySelectorAll('#taxRuleList span').forEach(function(sp){
+    const m=sp.textContent.match(/^([A-Z]+)\s+([0-9.]+)%/)
+    if(m)rules.push({taxCode:m[1],rateBp:Math.round(parseFloat(m[2])*100)})
+  })
+  await api('/api/merchant/tax',{method:'PUT',body:JSON.stringify({rules})})
+  alert('${L('saved')}')
+}
+
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
 
 async function renderAnalytics(){
   const[sales,top]=await Promise.all([api('/api/merchant/reports/sales?days=7'),api('/api/merchant/reports/top-items?limit=10')])

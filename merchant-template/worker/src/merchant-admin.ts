@@ -16,7 +16,7 @@ export async function handleGetProfile(request: Request, env: Env): Promise<Resp
 export async function handleUpdateProfile(request: Request, env: Env): Promise<Response> {
   try {
     const body = await request.json<any>()
-    const allowedFields = ['name', 'slogan', 'description', 'phone', 'email', 'address', 'business_hours', 'logo_url', 'cover_url', 'primary_color', 'template_id', 'language']
+    const allowedFields = ['name', 'slogan', 'description', 'phone', 'email', 'address', 'business_hours', 'logo_url', 'cover_url', 'primary_color', 'template_id', 'language', 'currency_symbol', 'social_media', 'tax_rate', 'enable_ordering', 'enable_payment', 'enable_chat', 'enable_phone']
     const updates: string[] = []
     const values: any[] = []
     for (const field of allowedFields) {
