@@ -48,6 +48,7 @@ function navigate(page, params) {
     case 'templates': renderTemplates(); break
     case 'settings': renderSettings(); break
     case 'scrape-jobs': renderScrapeJobs(); break
+    case 'audit': renderAuditLogs(); break
     case 'merchant-detail': renderMerchantDetail(params.id); break
   }
 }
@@ -726,6 +727,58 @@ async function renderScrapeJobs() {
     `
   } catch (e) {
     main.innerHTML = `<div class="empty-state"><p>❌ 加载失败: ${e.message}</p></div>`
+  }
+}
+
+// === Audit Logs ===
+async function renderAuditLogs() {
+  const main = document.getElementById('main-content')
+  main.innerHTML = '<div class="loading">加载审计日志...</div>'
+  try {
+    const data = await api('/api/audit-logs?limit=100')
+    const logs = data.logs ?? []
+    const actionLabels = {
+      LOGIN_SUCCESS: '登录成功', LOGIN_FAIL: '登录失败',
+      MERCHANT_CREATE: '创建商户', MERCHANT_UPDATE: '更新商户', MERCHANT_DELETE: '删除商户',
+      TOKEN_REGENERATE: '重新生成Token',
+      DEPLOYMENT_CREATE: '创建部署', DEPLOYMENT_UPDATE: '更新部署',
+    }
+    main.innerHTML = `
+      <div class="page-header">
+        <h2>📜 审计日志</h2>
+        <span style="color:var(--text-light);font-size:13px;">共 ${data.total ?? logs.length} 条</span>
+      </div>
+      <div class="card">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>操作</th>
+                <th>对象</th>
+                <th>ID</th>
+                <th>详情</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${logs.length ? logs.map(l => `
+                <tr>
+                  <td style="font-size:12px;white-space:nowrap;">${new Date(l.created_at).toLocaleString('zh-CN')}</td>
+                  <td><span class="badge ${l.action.startsWith('LOGIN_FAIL') || l.action.includes('DELETE') ? 'expired' : 'active'}">${actionLabels[l.action] || escHtml(l.action)}</span></td>
+                  <td>${escHtml(l.target_type) || '-'}</td>
+                  <td><code style="font-size:11px;">${escHtml(l.target_id || '-')}</code></td>
+                  <td style="font-size:12px;color:var(--text-light);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(l.detail || '-')}</td>
+                  <td style="font-size:12px;">${escHtml(l.ip || '-')}</td>
+                </tr>
+              `).join('') : '<tr><td colspan="6" style="text-align:center;color:#b2bec3;">暂无审计日志</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `
+  } catch (e) {
+    main.innerHTML = `<div class="empty-state"><p>❌ 加载失败: ${escHtml(e.message)}</p></div>`
   }
 }
 

@@ -184,3 +184,37 @@ export async function logAudit(
     // Silently fail - audit logging should never break the main flow
   }
 }
+
+export async function handleListAuditLogs(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url)
+    const action = url.searchParams.get('action')
+    const targetType = url.searchParams.get('targetType')
+    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50))
+    const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0)
+
+    const where: string[] = []
+    const params: any[] = []
+    if (action) { where.push('action = ?'); params.push(action) }
+    if (targetType) { where.push('target_type = ?'); params.push(targetType) }
+
+    const whereSql = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : ''
+    const rows = await env.CENTRAL_DB.prepare(
+      `SELECT id, action, target_type, target_id, detail, ip, created_at
+       FROM audit_logs${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all()
+
+    const countRow = await env.CENTRAL_DB.prepare(
+      `SELECT COUNT(*) as total FROM audit_logs${whereSql}`
+    ).bind(...params).first<{ total: number }>()
+
+    return new Response(JSON.stringify({
+      logs: rows.results || [],
+      total: countRow?.total || 0,
+      limit,
+      offset,
+    }), { headers: { 'Content-Type': 'application/json' } })
+  } catch {
+    return new Response(JSON.stringify({ logs: [], total: 0 }), { headers: { 'Content-Type': 'application/json' } })
+  }
+}

@@ -11,7 +11,7 @@ import { handleGetTaxRules, handleUpdateTaxRules } from './tax'
 import { syncMerchantKnowledge } from './knowledge-sync'
 import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
-import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents, handleGetKnowledgeConfig, handleUpdateKnowledgeConfig } from './merchant-admin'
+import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents, handleGetKnowledgeConfig, handleUpdateKnowledgeConfig, handleAiAnalytics } from './merchant-admin'
 import { handleListStores, handleCreateStore, handleUpdateStore, handleDeleteStore, handleStoreAnalytics } from './stores'
 import { handleListDeliveries, handleExportDelivery, handleListInventory, handleUpdateInventory, handleDeleteInventory, handleListSuppliers, handleCreateSupplier } from './delivery'
 import { jsonResponse, errorResponse } from './utils'
@@ -56,6 +56,7 @@ router.get('/api/merchant/profile', handleGetProfile)
 router.put('/api/merchant/profile', handleUpdateProfile)
 router.put('/api/merchant/menu', handleUpdateMenu)
 router.post('/api/merchant/events', handleAnalyticsEvents)
+router.get('/api/merchant/analytics/ai', handleAiAnalytics)
 
 router.get('/api/merchant/tax', handleGetTaxRules)
 router.put('/api/merchant/tax', handleUpdateTaxRules)

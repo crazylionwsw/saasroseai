@@ -7,7 +7,7 @@ import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs, handleGe
 import { handleDeployToMerchantCF } from './cf-deploy'
 import {
   timingSafeEqual, checkRateLimit, validateMerchantInput,
-  sanitizeError, getClientIP, logAudit, cleanupRateLimitStore,
+  sanitizeError, getClientIP, logAudit, cleanupRateLimitStore, handleListAuditLogs,
 } from './security'
 
 const { preflight, corsify } = cors({
@@ -212,6 +212,9 @@ router.put('/api/marketplace/templates/:templateId', (request: Request, env: Env
 router.delete('/api/marketplace/templates/:templateId', (request: Request, env: Env) => {
   return handleMarketDelete(request, env, (request as any).params.templateId)
 })
+
+// ── Audit Logs ──
+router.get('/api/audit-logs', handleListAuditLogs)
 
 // ── Health ──
 router.get('/api/health', () => jsonResponse({ status: 'ok' }))
