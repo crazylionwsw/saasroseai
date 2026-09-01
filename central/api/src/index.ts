@@ -4,7 +4,7 @@ import { generateAdminToken, verifyAdminToken } from './auth'
 import { handleListMerchants, handleGetMerchant, handleCreateMerchant, handleUpdateMerchant, handleDeleteMerchant, handleVerifyMerchant, handleRegenerateToken } from './merchants'
 import { handleListDeployments, handleCreateDeployment, handleUpdateDeployment } from './deployments'
 import { handleScrapeWebsite, handleGetScrapeJob, handleListScrapeJobs, handleGetTemplateFile, handleListTemplates, handleDeleteTemplate, handleSeedBuiltInTemplates } from './template-scraper'
-import { handleDeployToMerchantCF } from './cf-deploy'
+import { handleDeployToMerchantCF, handleAddCustomDomain, handleRemoveCustomDomain } from './cf-deploy'
 import {
   timingSafeEqual, checkRateLimit, validateMerchantInput,
   sanitizeError, getClientIP, logAudit, cleanupRateLimitStore, handleListAuditLogs,
@@ -153,6 +153,20 @@ router.post('/api/merchants/:merchantId/deploy-cf', async (request: Request, env
   const rl = checkRateLimit(ip, 'sensitive')
   if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
   return handleDeployToMerchantCF(request, env, merchantId)
+})
+
+// ── Custom Domain (TASK-062) ──
+router.post('/api/merchants/:merchantId/custom-domain', async (request: Request, env: Env): Promise<Response> => {
+  const ip = getClientIP(request)
+  const rl = checkRateLimit(ip, 'sensitive')
+  if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
+  return handleAddCustomDomain(request, env, (request as any).params.merchantId)
+})
+router.delete('/api/merchants/:merchantId/custom-domain', async (request: Request, env: Env): Promise<Response> => {
+  const ip = getClientIP(request)
+  const rl = checkRateLimit(ip, 'sensitive')
+  if (!rl.allowed) return errorResponse(`请${rl.retryAfter}秒后再试`, 429)
+  return handleRemoveCustomDomain(request, env, (request as any).params.merchantId)
 })
 
 // ── Deployments ──

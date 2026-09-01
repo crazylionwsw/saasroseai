@@ -242,3 +242,77 @@ export async function handleDeployToMerchantCF(request: Request, env: Env, merch
     return errorResponse(`部署失败: ${msg}`, 500)
   }
 }
+
+const DOMAIN_REGEX = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i
+
+async function getMerchantCfCreds(env: Env, merchantId: string): Promise<{ accountId: string; apiToken: string } | null> {
+  const row = await env.CENTRAL_DB.prepare(
+    'SELECT cf_account_id, cf_api_token FROM merchants WHERE id = ?'
+  ).bind(merchantId).first<{ cf_account_id: string | null; cf_api_token: string | null } | null>()
+  if (!row?.cf_account_id || !row.cf_api_token) return null
+  return { accountId: row.cf_account_id, apiToken: row.cf_api_token }
+}
+
+export async function handleAddCustomDomain(request: Request, env: Env, merchantId: string): Promise<Response> {
+  try {
+    if (!merchantId || typeof merchantId !== 'string') {
+      return errorResponse('商户ID无效', 400)
+    }
+    const body = (await request.json<any>().catch(() => ({}))) as { domain?: string }
+    const domain = (body.domain || '').trim().toLowerCase()
+    if (!DOMAIN_REGEX.test(domain)) {
+      return errorResponse('域名格式无效', 400)
+    }
+    const creds = await getMerchantCfCreds(env, merchantId)
+    if (!creds) return errorResponse('商户未配置 Cloudflare 凭据', 400)
+
+    const projectName = `storefront-${merchantId}`
+    try {
+      await cfApiFetch(`/accounts/${creds.accountId}/pages/projects/${projectName}`, creds.apiToken)
+    } catch {
+      return errorResponse('商户官网尚未部署', 409)
+    }
+
+    const result = await cfApiFetch(
+      `/accounts/${creds.accountId}/pages/projects/${projectName}/domains`,
+      creds.apiToken,
+      { method: 'POST', body: JSON.stringify({ name: domain }) },
+    )
+
+    await env.CENTRAL_DB.prepare(
+      'UPDATE merchants SET custom_domain = ? WHERE id = ?'
+    ).bind(domain, merchantId).run()
+
+    return jsonResponse({ success: true, domain, status: result?.status || 'pending' })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`绑定域名失败: ${msg}`, 500)
+  }
+}
+
+export async function handleRemoveCustomDomain(request: Request, env: Env, merchantId: string): Promise<Response> {
+  try {
+    const url = new URL(request.url)
+    const domain = (url.searchParams.get('domain') || '').trim().toLowerCase()
+    if (!domain) return errorResponse('缺少 domain 参数', 400)
+
+    const creds = await getMerchantCfCreds(env, merchantId)
+    if (!creds) return errorResponse('商户未配置 Cloudflare 凭据', 400)
+
+    const projectName = `storefront-${merchantId}`
+    await cfApiFetch(
+      `/accounts/${creds.accountId}/pages/projects/${projectName}/domains/${encodeURIComponent(domain)}`,
+      creds.apiToken,
+      { method: 'DELETE' },
+    )
+
+    await env.CENTRAL_DB.prepare(
+      `UPDATE merchants SET custom_domain = NULL WHERE id = ? AND custom_domain = ?`
+    ).bind(merchantId, domain).run()
+
+    return jsonResponse({ success: true, domain })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`解绑域名失败: ${msg}`, 500)
+  }
+}

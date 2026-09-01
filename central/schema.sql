@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS merchants (
   cover_url TEXT,
   social_media TEXT,
   language TEXT DEFAULT 'zh',
-  currency_symbol TEXT
+  currency_symbol TEXT,
+  custom_domain TEXT
 );
 
 CREATE TABLE IF NOT EXISTS merchant_configs (
