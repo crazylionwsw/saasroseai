@@ -21,28 +21,79 @@ CREATE TABLE IF NOT EXISTS merchant_info (
   enable_phone INTEGER DEFAULT 0,
   language TEXT DEFAULT 'zh',
   currency_symbol TEXT DEFAULT '¥',
+  tax_rate INTEGER DEFAULT 500,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
   merchant_id TEXT NOT NULL,
+  order_number TEXT,
+  order_type TEXT DEFAULT 'pickup' CHECK(order_type IN ('dine_in','pickup')),
+  table_id TEXT,
   customer_name TEXT,
   customer_phone TEXT,
   customer_address TEXT,
   items TEXT NOT NULL,
-  subtotal REAL NOT NULL,
+  subtotal REAL NOT NULL DEFAULT 0,
   delivery_fee REAL DEFAULT 0,
   discount REAL DEFAULT 0,
-  total REAL NOT NULL,
-  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','confirmed','preparing','delivering','completed','cancelled')),
-  payment_status TEXT DEFAULT 'unpaid' CHECK(payment_status IN ('unpaid','paid','refunded')),
+  total REAL NOT NULL DEFAULT 0,
+  subtotal_cents INTEGER NOT NULL DEFAULT 0,
+  tax_cents INTEGER NOT NULL DEFAULT 0,
+  tip_cents INTEGER NOT NULL DEFAULT 0,
+  total_cents INTEGER NOT NULL DEFAULT 0,
+  currency TEXT DEFAULT 'CAD',
+  status TEXT DEFAULT 'draft' CHECK(status IN ('draft','pending_payment','paid','confirmed','preparing','ready','completed','cancelled','refunded')),
+  payment_status TEXT DEFAULT 'not_required' CHECK(payment_status IN ('not_required','pending','processing','succeeded','failed','cancelled','refunded','partially_refunded')),
   payment_method TEXT,
   payment_id TEXT,
   note TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS payments (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  order_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_payment_id TEXT,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT DEFAULT 'CAD',
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','processing','succeeded','failed','cancelled','refunded','partially_refunded')),
+  metadata TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_provider_ref ON payments(provider, provider_payment_id);
+CREATE INDEX IF NOT EXISTS idx_payments_merchant ON payments(merchant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_event_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  data TEXT,
+  processed_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_events_dedupe ON payment_events(provider, provider_event_id);
+CREATE INDEX IF NOT EXISTS idx_payment_events_merchant ON payment_events(merchant_id, processed_at DESC);
+
+CREATE TABLE IF NOT EXISTS refunds (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  payment_id TEXT NOT NULL,
+  provider_refund_id TEXT,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT DEFAULT 'CAD',
+  reason TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_refunds_payment ON refunds(payment_id);
 
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY,

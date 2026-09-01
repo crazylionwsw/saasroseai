@@ -506,6 +506,19 @@ ul { list-style: none; }
   gap: 12px;
 }
 
+.order-type {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9rem;
+}
+
+.order-type label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
 .order-form input,
 .order-form textarea {
   width: 100%;

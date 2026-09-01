@@ -495,7 +495,7 @@ Keep responses very concise and conversational — this is a phone call. Speak n
     try {
       const orderId = 'ORD_' + crypto.randomUUID().slice(0, 8)
       await this.env.MERCHANT_DB.prepare(
-        `INSERT INTO orders (id, merchant_id, customer_name, customer_phone, customer_address, items, subtotal, total, status, payment_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'pending', 'unpaid', ?, ?)`
+        `INSERT INTO orders (id, merchant_id, order_type, customer_name, customer_phone, customer_address, items, subtotal_cents, total_cents, status, payment_status, created_at, updated_at) VALUES (?, ?, 'pickup', ?, ?, ?, ?, 0, 0, 'draft', 'not_required', ?, ?)`
       ).bind(
         orderId,
         this.state.merchantId,

@@ -111,6 +111,13 @@ export async function handleDeployToMerchantCF(request: Request, env: Env, merch
 
     if (!merchant) return errorResponse('商户不存在', 404)
 
+    const workerDeploy = await env.CENTRAL_DB.prepare(
+      `SELECT worker_url FROM deployments
+       WHERE merchant_id = ? AND status = 'success' AND worker_url != ''
+       ORDER BY started_at DESC LIMIT 1`
+    ).bind(merchantId).first<{ worker_url: string } | null>()
+    const apiBase = workerDeploy?.worker_url || ''
+
     const { cf_account_id: accountId, cf_api_token: apiToken, template_id: templateId } = merchant
 
     if (!accountId) return errorResponse('商户未配置 Cloudflare Account ID', 400)
@@ -156,6 +163,7 @@ export async function handleDeployToMerchantCF(request: Request, env: Env, merch
       XIAOHONGSHU_URL: socialMedia.xiaohongshu || '#',
       LANG: merchantLang,
       CURRENCY_SYMBOL: currencySymbol,
+      API_BASE: apiBase,
       TRANSLATIONS_JSON: translationsJson,
       ...langSelectedVars,
     }

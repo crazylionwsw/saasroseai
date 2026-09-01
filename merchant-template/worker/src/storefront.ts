@@ -56,6 +56,7 @@ async function renderTemplate(html: string, env: Env, merchantInfo: any): Promis
   result = result
     .replace(/\{\{LANG\}\}/g, detectedLang)
     .replace(/\{\{CURRENCY_SYMBOL\}\}/g, currencySymbol)
+    .replace(/\{\{API_BASE\}\}/g, merchantInfo.apiBase || '')
     .replace(/\{\{TRANSLATIONS_JSON\}\}/g, JSON.stringify(translations).replace(/'/g, "\\'").replace(/</g, '\\u003c'))
     .replace(/\{\{RESTAURANT_NAME\}\}/g, merchantInfo.name || '')
     .replace(/\{\{RESTAURANT_SLOGAN\}\}/g, merchantInfo.slogan || '')

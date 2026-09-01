@@ -31,7 +31,8 @@ export async function handleExportDelivery(request: Request, env: Env): Promise<
       let csv = 'OrderID,CustomerName,Phone,Address,Items,Total,Status,Created\n'
       for (const o of (orders.results || []) as any[]) {
         const items = typeof o.items === 'string' ? o.items.replace(/"/g, '""') : JSON.stringify(o.items || [])
-        csv += `"${o.id}","${o.customer_name || ''}","${o.customer_phone || ''}","${o.customer_address || ''}","${items}",${o.total || 0},"${o.status}","${o.created_at}"\n`
+        const total = (o.total_cents ?? (o.total * 100)) / 100
+        csv += `"${o.id}","${o.customer_name || ''}","${o.customer_phone || ''}","${o.customer_address || ''}","${items}",${total.toFixed(2)},"${o.status}","${o.created_at}"\n`
       }
       return new Response(csv, {
         headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename=orders-export.csv' },

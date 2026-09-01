@@ -6,6 +6,9 @@ export interface Env {
   MERCHANT_ID: string;
   MERCHANT_TOKEN: string;
   CENTRAL_AUTH_URL: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PUBLISHABLE_KEY?: string;
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_PHONE_NUMBER?: string;
@@ -24,15 +27,127 @@ export interface MenuItem {
 
 export interface MenuCategory { name: string; items: MenuItem[] }
 
+export type OrderStatus =
+  | 'draft' | 'pending_payment' | 'paid' | 'confirmed' | 'preparing'
+  | 'ready' | 'completed' | 'cancelled' | 'refunded'
+
+export type PaymentStatus =
+  | 'not_required' | 'pending' | 'processing' | 'succeeded' | 'failed'
+  | 'cancelled' | 'refunded' | 'partially_refunded'
+
+export type OrderType = 'dine_in' | 'pickup'
+
 export interface Order {
-  id: string; merchantId: string;
-  customerName?: string; customerPhone?: string; customerAddress?: string;
-  items: string; subtotal: number; deliveryFee?: number;
-  discount?: number; total: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'delivering' | 'completed' | 'cancelled';
-  paymentStatus: 'unpaid' | 'paid' | 'refunded';
-  paymentMethod?: string; paymentId?: string; note?: string;
-  createdAt: string; updatedAt: string;
+  id: string;
+  merchantId: string;
+  orderNumber?: string;
+  orderType: OrderType;
+  tableId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  items: string;
+  subtotal: number;
+  deliveryFee?: number;
+  discount?: number;
+  total: number;
+  subtotalCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  currency: string;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  paymentMethod?: string;
+  paymentId?: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payment {
+  id: string;
+  merchantId: string;
+  orderId: string;
+  provider: string;
+  providerPaymentId?: string;
+  amountCents: number;
+  currency: string;
+  status: PaymentStatus;
+  metadata?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentEvent {
+  id: string;
+  merchantId: string;
+  provider: string;
+  providerEventId: string;
+  type: string;
+  data?: string;
+  processedAt: string;
+}
+
+export interface CartLineRequest {
+  id: string | number;
+  qty: number;
+  modifiers?: string[];
+}
+
+export interface CalculatedLine {
+  id: string;
+  name: string;
+  qty: number;
+  priceCents: number;
+  lineCents: number;
+}
+
+export interface PriceQuote {
+  lines: CalculatedLine[];
+  subtotalCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  currency: string;
+}
+
+export interface CheckoutResult {
+  checkoutUrl: string;
+  providerPaymentId: string;
+}
+
+export interface PaymentResult {
+  providerPaymentId: string;
+  status: PaymentStatus;
+  amountCents: number;
+  currency: string;
+  checkoutUrl?: string;
+}
+
+export interface RefundResult {
+  providerRefundId: string;
+  amountCents: number;
+}
+
+export interface WebhookEvent {
+  providerEventId: string;
+  type: string;
+  data: any;
+}
+
+export interface PaymentProvider {
+  createCheckout(params: {
+    orderId: string;
+    merchantId: string;
+    amountCents: number;
+    currency: string;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<CheckoutResult>;
+  getPayment(providerPaymentId: string): Promise<PaymentResult>;
+  refund(providerPaymentId: string, amountCents: number, reason?: string): Promise<RefundResult>;
+  verifyWebhook(request: Request): Promise<WebhookEvent>;
 }
 
 export interface MerchantInfo {

@@ -47,6 +47,10 @@
           <span class="cart-total-value">{{CURRENCY_SYMBOL}}0.00</span>
         </div>
         <form class="order-form">
+          <div class="order-type">
+            <label><input type="radio" name="orderType" value="pickup" checked> {{T:order_type_pickup}}</label>
+            <label><input type="radio" name="orderType" value="dine_in"> {{T:order_type_dine_in}}</label>
+          </div>
           <input type="text" name="name" placeholder="{{T:form_name}}" required>
           <input type="tel" name="phone" placeholder="{{T:form_phone}}" required>
           <input type="text" name="address" placeholder="{{T:form_address}}" required>
@@ -70,6 +74,7 @@
   <script>
     window.TRANSLATIONS = {{TRANSLATIONS_JSON}};
     window.CURRENCY_SYMBOL = '{{CURRENCY_SYMBOL}}';
+    window.API_BASE = '{{API_BASE}}';
     window.LANG = '{{LANG}}';
     function switchLang(code) {
       var d = new Date();

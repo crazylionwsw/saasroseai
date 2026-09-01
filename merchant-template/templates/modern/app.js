@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(getApiUrl('/api/menu'))
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        menuData = data;
+        menuData = data.items || (Array.isArray(data) ? data : []);
         renderMenuAll();
         renderFeatured();
       })
@@ -196,57 +196,91 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var orderForm = document.querySelector('.order-form');
   if (orderForm) {
+    var qrToken = null;
+    try {
+      qrToken = new URL(window.location.href).searchParams.get('qr');
+    } catch (_) {}
+    if (qrToken) {
+      var dineInRadio = orderForm.querySelector('[name="orderType"][value="dine_in"]');
+      if (dineInRadio) dineInRadio.checked = true;
+    }
+
     orderForm.addEventListener('submit', function (e) {
       e.preventDefault();
       var name = orderForm.querySelector('[name="name"]');
       var phone = orderForm.querySelector('[name="phone"]');
       var address = orderForm.querySelector('[name="address"]');
       var note = orderForm.querySelector('[name="note"]');
+      var orderTypeEl = orderForm.querySelector('[name="orderType"]:checked');
+      var orderType = orderTypeEl ? orderTypeEl.value : (qrToken ? 'dine_in' : 'pickup');
 
       if (!name.value.trim()) { alert(__('order_error_no_name')); name.focus(); return; }
       if (!phone.value.trim()) { alert(__('order_error_no_phone')); phone.focus(); return; }
-      if (!address.value.trim()) { alert(__('order_error_no_address')); address.focus(); return; }
+      if (orderType !== 'dine_in' && !address.value.trim()) { alert(__('order_error_no_address')); address.focus(); return; }
       if (!cart.length) { alert(__('order_error_empty_cart')); return; }
 
       var submitBtn = orderForm.querySelector('[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.textContent = __('form_submitting');
+      var redirecting = false;
 
       var payload = {
-        name: name.value.trim(),
-        phone: phone.value.trim(),
-        address: address.value.trim(),
+        orderType: orderType,
+        customerName: name.value.trim(),
+        customerPhone: phone.value.trim(),
+        customerAddress: address.value.trim(),
         note: note.value.trim(),
-        items: cart.map(function (item) { return { id: item.id, name: item.name, price: item.price, qty: item.qty }; }),
-        total: cart.reduce(function (s, i) { return s + i.price * i.qty; }, 0)
+        items: cart.map(function (item) { return { id: item.id, qty: item.qty }; })
       };
+      if (qrToken) payload.qrToken = qrToken;
 
       fetch(getApiUrl('/api/orders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-        .then(function (r) { return r.json(); })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
+          if (!res.ok) { throw new Error(res.j && res.j.error ? res.j.error : __('order_error_submit')); }
+          var order = res.j;
+          var total = (order.totalCents != null ? order.totalCents : 0) / 100;
+
+          if (order.requiresPayment) {
+            redirecting = true;
+            submitBtn.textContent = __('order_redirecting');
+            return fetch(getApiUrl('/api/payments/create'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderId: order.orderId || order.id })
+            })
+              .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+              .then(function (p) {
+                if (!p.ok || !p.j || !p.j.checkoutUrl) { throw new Error(p.j && p.j.error ? p.j.error : 'payment_error'); }
+                window.location.href = p.j.checkoutUrl;
+              });
+          }
+
           var modal = document.getElementById('orderModal');
           if (modal) {
             modal.classList.add('open');
             var idEl = modal.querySelector('.order-id');
             var totalEl = modal.querySelector('.order-total');
-            if (idEl) idEl.textContent = res.orderId || res.id || '—';
-            if (totalEl) totalEl.textContent = formatPrice(payload.total);
+            if (idEl) idEl.textContent = order.orderId || order.id || '—';
+            if (totalEl) totalEl.textContent = C + total.toFixed(2);
           }
           cart = [];
           saveCart();
           renderCart();
           orderForm.reset();
         })
-        .catch(function () {
-          alert(__('order_error_submit'));
+        .catch(function (err) {
+          alert(err && err.message ? err.message : __('order_error_submit'));
         })
         .finally(function () {
-          submitBtn.disabled = false;
-          submitBtn.textContent = __('form_submit');
+          if (!redirecting) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = __('form_submit');
+          }
         });
     });
   }

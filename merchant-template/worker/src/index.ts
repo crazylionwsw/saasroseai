@@ -2,8 +2,9 @@ import { AutoRouter, cors } from 'itty-router'
 import { Env } from './types'
 import { verifyMerchant } from './auth-middleware'
 import { handleGenerateSite, handleGetTemplateList, handleGeneratePreview } from './storefront'
-import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderStatus, handleGetMenu } from './order'
-import { handleCreatePayment, handlePaymentCallback, handleQueryPayment } from './payment'
+import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderStatus, handleGetMenu, handleCalculateQuote } from './order'
+import { handleCreatePayment, handleStripeWebhook, handleQueryPayment } from './payment'
+import { handleGenerateQr, handleVerifyQr } from './qr'
 import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
 import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents } from './merchant-admin'
@@ -27,9 +28,13 @@ router.get('/api/orders', handleListOrders)
 router.get('/api/orders/:orderId', handleGetOrder)
 router.put('/api/orders/:orderId/status', handleUpdateOrderStatus)
 
+router.post('/api/cart/calculate', handleCalculateQuote)
+
 router.post('/api/payments/create', handleCreatePayment)
-router.post('/api/payments/callback', handlePaymentCallback)
 router.get('/api/payments/:orderId', handleQueryPayment)
+
+router.post('/api/qr', handleGenerateQr)
+router.get('/api/qr/verify', handleVerifyQr)
 
 router.get('/api/phone/status', handlePhoneStatus)
 router.post('/api/phone/configure', handlePhoneConfigure)
@@ -62,6 +67,9 @@ export default {
     const url = new URL(request.url)
     if (url.pathname === '/ws') {
       return handleWebSocketUpgrade(request, env)
+    }
+    if (url.pathname === '/api/payments/webhook') {
+      return handleStripeWebhook(request, env)
     }
     const authResult = await verifyMerchant(env)
     if (authResult.status !== 'active') {
@@ -167,12 +175,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
 th,td{padding:10px 14px;text-align:left;font-size:0.85rem;border-bottom:1px solid #eee}
 th{background:#fafafa;font-weight:600;color:#555;font-size:0.8rem;text-transform:uppercase}
-.status{padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:500}
-.status.pending{background:#fff3cd;color:#856404}
-.status.confirmed{background:#cce5ff;color:#004085}
+.status{display:inline-block;padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:500;text-transform:capitalize}
+.status.draft,.status.not_required{background:#e2e3e5;color:#383d41}
+.status.pending_payment,.status.pending{background:#fff3cd;color:#856404}
+.status.paid,.status.confirmed{background:#cce5ff;color:#004085}
 .status.preparing{background:#d4edda;color:#155724}
+.status.ready{background:#d1f7d8;color:#1d7a33}
 .status.completed{background:#e2e3e5;color:#383d41}
 .status.cancelled{background:#f8d7da;color:#721c24}
+.status.failed{background:#f8d7da;color:#721c24}
 .btn{padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem;transition:.2s}
 .btn-primary{background:#1a1a2e;color:#fff}.btn-primary:hover{background:#2d2d5e}
 .btn-sm{padding:4px 12px;font-size:0.78rem}

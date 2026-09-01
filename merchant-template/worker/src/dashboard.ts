@@ -10,19 +10,19 @@ export async function handleDashboardStats(request: Request, env: Env): Promise<
       env.MERCHANT_DB.prepare('SELECT COUNT(*) as c FROM orders WHERE merchant_id = ?').bind(env.MERCHANT_ID).first<{ c: number }>(),
       env.MERCHANT_DB.prepare("SELECT COUNT(*) as c FROM orders WHERE merchant_id = ? AND date(created_at) = ?").bind(env.MERCHANT_ID, today).first<{ c: number }>(),
       env.MERCHANT_DB.prepare("SELECT COUNT(*) as c FROM orders WHERE merchant_id = ? AND created_at >= ?").bind(env.MERCHANT_ID, firstOfMonth).first<{ c: number }>(),
-      env.MERCHANT_DB.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE merchant_id = ? AND status != 'cancelled'").bind(env.MERCHANT_ID).first<{ t: number }>(),
-      env.MERCHANT_DB.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE merchant_id = ? AND date(created_at) = ? AND status != 'cancelled'").bind(env.MERCHANT_ID, today).first<{ t: number }>(),
-      env.MERCHANT_DB.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE merchant_id = ? AND created_at >= ? AND status != 'cancelled'").bind(env.MERCHANT_ID, firstOfMonth).first<{ t: number }>(),
-      env.MERCHANT_DB.prepare("SELECT COUNT(*) as c FROM orders WHERE merchant_id = ? AND status = 'pending'").bind(env.MERCHANT_ID).first<{ c: number }>(),
+      env.MERCHANT_DB.prepare("SELECT COALESCE(SUM(total_cents),0) as t FROM orders WHERE merchant_id = ? AND status != 'cancelled'").bind(env.MERCHANT_ID).first<{ t: number }>(),
+      env.MERCHANT_DB.prepare("SELECT COALESCE(SUM(total_cents),0) as t FROM orders WHERE merchant_id = ? AND date(created_at) = ? AND status != 'cancelled'").bind(env.MERCHANT_ID, today).first<{ t: number }>(),
+      env.MERCHANT_DB.prepare("SELECT COALESCE(SUM(total_cents),0) as t FROM orders WHERE merchant_id = ? AND created_at >= ? AND status != 'cancelled'").bind(env.MERCHANT_ID, firstOfMonth).first<{ t: number }>(),
+      env.MERCHANT_DB.prepare("SELECT COUNT(*) as c FROM orders WHERE merchant_id = ? AND status = 'pending_payment'").bind(env.MERCHANT_ID).first<{ c: number }>(),
     ])
 
     return jsonResponse({
       totalOrders: totalOrders?.c || 0,
       todayOrders: todayOrders?.c || 0,
       monthlyOrders: monthlyOrders?.c || 0,
-      totalRevenue: revenue?.t || 0,
-      todayRevenue: todayRevenue?.t || 0,
-      monthlyRevenue: monthlyRevenue?.t || 0,
+      totalRevenue: ((revenue?.t || 0) / 100),
+      todayRevenue: ((todayRevenue?.t || 0) / 100),
+      monthlyRevenue: ((monthlyRevenue?.t || 0) / 100),
       pendingOrders: pendingOrders?.c || 0,
     })
   } catch {
@@ -57,17 +57,24 @@ export async function handleSalesReport(request: Request, env: Env): Promise<Res
     const rows = await env.MERCHANT_DB.prepare(
       `SELECT strftime('${dateFormat}', created_at) as period,
               COUNT(*) as order_count,
-              COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total ELSE 0 END), 0) as revenue,
-              COALESCE(AVG(CASE WHEN status != 'cancelled' THEN total ELSE NULL END), 0) as avg_order
+              COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total_cents ELSE 0 END), 0) as revenue_cents,
+              COALESCE(AVG(CASE WHEN status != 'cancelled' THEN total_cents ELSE NULL END), 0) as avg_order_cents
        FROM orders
        WHERE merchant_id = ? AND created_at >= ${whereClause}
        GROUP BY period ORDER BY period ASC`
     ).bind(env.MERCHANT_ID).all()
 
+    const data = (rows.results || []).map((r: any) => ({
+      period: r.period,
+      order_count: r.order_count,
+      revenue: Number(r.revenue_cents || 0) / 100,
+      avg_order: Number(r.avg_order_cents || 0) / 100,
+    }))
+
     return jsonResponse({
       period,
       days: period === 'hourly' ? Math.min(days, 3) : days,
-      data: rows.results || [],
+      data,
     })
   } catch {
     return errorResponse('获取报表失败', 500, 500)
@@ -81,14 +88,22 @@ export async function handleTopItems(request: Request, env: Env): Promise<Respon
     const days = parseInt(url.searchParams.get('days') || '30')
 
     const rows = await env.MERCHANT_DB.prepare(
-      `SELECT oi.value as item_name, SUM(oi.quantity) as qty, SUM(oi.total) as revenue
+      `SELECT oi.value.name as item_name,
+              SUM(oi.value.qty) as qty,
+              SUM(oi.value.lineCents) as revenue_cents
        FROM orders, json_each(orders.items) as oi
        WHERE orders.merchant_id = ? AND orders.status != 'cancelled'
          AND orders.created_at >= datetime('now', '-${days} days')
        GROUP BY item_name ORDER BY qty DESC LIMIT ?`
     ).bind(env.MERCHANT_ID, limit).all()
 
-    return jsonResponse({ items: rows.results || [], limit, days })
+    const items = (rows.results || []).map((r: any) => ({
+      item_name: r.item_name,
+      qty: r.qty,
+      revenue: Number(r.revenue_cents || 0) / 100,
+    }))
+
+    return jsonResponse({ items, limit, days })
   } catch {
     return jsonResponse({ items: [], limit: 0, days: 0 })
   }

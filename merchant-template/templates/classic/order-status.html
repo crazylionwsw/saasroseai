@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{RESTAURANT_NAME}} - {{T:page_title_order}}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="logo">
+        <img src="{{LOGO_URL}}" alt="{{RESTAURANT_NAME}}">
+        <h1>{{RESTAURANT_NAME}}</h1>
+      </div>
+      <button class="hamburger" aria-label="{{T:nav_menu}}">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="nav">
+        <a href="index.html">{{T:nav_home}}</a>
+        <a href="menu.html">{{T:nav_menu}}</a>
+        <a href="order.html">{{T:nav_order}}</a>
+        <a href="contact.html">{{T:nav_contact}}</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="order-page" style="max-width:640px;margin:0 auto;">
+    <div class="card" id="status-card" style="background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);padding:40px 24px;text-align:center;margin-top:40px;">
+      <div id="status-content" style="font-size:1rem;color:#555;">
+        <div class="spinner" style="width:28px;height:28px;border:3px solid #eee;border-top-color:var(--primary);border-radius:50%;margin:0 auto 16px;animation:spin 0.8s linear infinite;"></div>
+        <p>{{T:order_status_loading}}</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; {{YEAR}} {{RESTAURANT_NAME}} - Powered by Rose SaaS</p>
+    </div>
+  </footer>
+
+  <script>
+    window.TRANSLATIONS = {{TRANSLATIONS_JSON}};
+    window.CURRENCY_SYMBOL = '{{CURRENCY_SYMBOL}}';
+    window.API_BASE = '{{API_BASE}}';
+    window.LANG = '{{LANG}}';
+    function __(k, f) { return (window.TRANSLATIONS && window.TRANSLATIONS[k]) || f || k; }
+  </script>
+  <script>
+    (function () {
+      var API_BASE = window.API_BASE || '';
+      var orderId = new URLSearchParams(window.location.search).get('order_id');
+      var content = document.getElementById('status-content');
+      if (!orderId) {
+        content.innerHTML = '<p>' + __('order_status_missing', 'Missing order id') + '</p>';
+        return;
+      }
+      var attempts = 0;
+      function poll() {
+        fetch(API_BASE + '/api/payments/' + encodeURIComponent(orderId))
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            var ps = (d && d.payment_status) || '';
+            var os = (d && d.orderStatus) || '';
+            if (ps === 'succeeded' || os === 'paid') {
+              content.innerHTML =
+                '<div style="font-size:44px;">✅</div>' +
+                '<h2 style="margin:12px 0 8px;">' + __('order_status_paid', 'Payment successful!') + '</h2>' +
+                '<p>' + __('order_status_thanks', 'Thank you! Your order has been paid and is being prepared.') + '</p>' +
+                '<p style="margin-top:12px;font-size:0.85rem;color:#999;">' + __('order_success_id', 'Order #') + ': ' + orderId + '</p>';
+              return;
+            }
+            if (ps === 'failed' || ps === 'cancelled') {
+              content.innerHTML =
+                '<div style="font-size:44px;">❌</div>' +
+                '<h2 style="margin:12px 0 8px;">' + __('order_status_failed', 'Payment failed') + '</h2>' +
+                '<p><a href="order.html" style="color:var(--primary);">' + __('order_status_retry', 'Try again') + '</a></p>';
+              return;
+            }
+            attempts += 1;
+            if (attempts > 10) {
+              content.innerHTML =
+                '<div style="font-size:44px;">⏳</div>' +
+                '<h2 style="margin:12px 0 8px;">' + __('order_status_processing', 'Payment processing') + '</h2>' +
+                '<p>' + __('order_status_refresh', 'Please refresh this page shortly to check your order status.') + '</p>';
+              return;
+            }
+            setTimeout(poll, 2000);
+          })
+          .catch(function () { setTimeout(poll, 3000); });
+      }
+      poll();
+    })();
+  </script>
+</body>
+</html>

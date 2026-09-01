@@ -1,125 +1,206 @@
-import { Env, Order } from './types'
-import { jsonResponse, errorResponse } from './utils'
+import { Env } from './types'
+import { jsonResponse, errorResponse, generateId } from './utils'
+import { StripePaymentProvider, mapStripeSessionStatus, mapStripePaymentIntentStatus } from './payment-provider'
+import { canTransitionPayment, paymentTransitionError } from './payment-state'
+import { canTransitionOrder, orderTransitionError } from './order-state'
 
-const STRIPE_API = 'https://api.stripe.com/v1'
-
-async function stripeFetch(path: string, secretKey: string, body: Record<string, string>): Promise<any> {
-  const resp = await fetch(`${STRIPE_API}${path}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${secretKey}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams(body).toString(),
-  })
-  const data: any = await resp.json()
-  if (!resp.ok) {
-    throw new Error(data.error?.message || `Stripe error: ${resp.status}`)
-  }
-  return data
+function getProvider(env: Env): StripePaymentProvider {
+  return new StripePaymentProvider(env)
 }
 
 export async function handleCreatePayment(request: Request, env: Env): Promise<Response> {
   try {
-    const body = await request.json<{ orderId: string; method: string }>()
-    const { orderId, method } = body
-    if (!orderId || !method) {
-      return errorResponse('Missing required fields (orderId, method)', 400)
+    const body = await request.json<{ orderId: string; method?: string }>()
+    const { orderId } = body
+    if (!orderId) {
+      return errorResponse('缺少订单号', 400)
     }
 
     const order = await env.MERCHANT_DB.prepare(
-      'SELECT id, total, merchant_id FROM orders WHERE id = ? AND merchant_id = ?'
-    ).bind(orderId, env.MERCHANT_ID).first<{ id: string; total: number; merchant_id: string } | null>()
+      `SELECT id, merchant_id, total_cents, status, payment_status, currency
+       FROM orders WHERE id = ? AND merchant_id = ?`
+    ).bind(orderId, env.MERCHANT_ID).first<{
+      id: string; merchant_id: string; total_cents: number; status: string; payment_status: string; currency: string;
+    } | null>()
     if (!order) {
-      return errorResponse('Order not found', 404)
+      return errorResponse('订单不存在', 404)
     }
-    if (order.total <= 0) {
-      return errorResponse('Invalid order amount', 400)
-    }
-
-    const stripeSecretKey = (env as any).STRIPE_SECRET_KEY
-    if (!stripeSecretKey) {
-      return errorResponse('Payment not configured', 500)
+    if (order.total_cents <= 0) {
+      return errorResponse('订单金额无效', 400)
     }
 
-    const domain = request.headers.get('origin') || 'https://saas.roseai.ca'
-    const amountInCents = Math.round(order.total * 100)
+    const provider = getProvider(env)
 
-    if (method === 'stripe') {
-      const paymentIntent = await stripeFetch('/payment_intents', stripeSecretKey, {
-        amount: String(amountInCents),
-        currency: 'cad',
-        metadata: JSON.stringify({ order_id: orderId, merchant_id: order.merchant_id }),
-        description: `Order #${orderId.slice(0, 8)}`,
-        automatic_payment_methods: '{"enabled":true}',
-      })
-
-      return jsonResponse({
-        paymentIntentId: paymentIntent.id,
-        clientSecret: paymentIntent.client_secret,
-        orderId,
-        amount: order.total,
-        method: 'stripe',
-      })
-    }
-
-    // Mock WeChat/Alipay for non-Stripe methods
-    const paymentUrl = `${domain}/api/payments/mock-checkout?order_id=${orderId}&method=${method}&amount=${order.total}`
-    return jsonResponse({ paymentUrl, orderId, amount: order.total, method })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return errorResponse(`Payment creation failed: ${msg}`, 500)
-  }
-}
-
-export async function handlePaymentCallback(request: Request, env: Env): Promise<Response> {
-  try {
-    const body = await request.json<{ orderId: string; paymentId: string; status: string }>()
-    const { orderId, paymentId, status } = body
-    if (!orderId || !paymentId) {
-      return errorResponse('Missing required fields', 400)
-    }
-
-    // Verify with Stripe if it's a Stripe payment
-    const stripeSecretKey = (env as any).STRIPE_SECRET_KEY
-    if (status === 'success' && paymentId.startsWith('pi_') && stripeSecretKey) {
-      const verifyResp = await fetch(`${STRIPE_API}/payment_intents/${paymentId}`, {
-        headers: { 'Authorization': `Bearer ${stripeSecretKey}` },
-      })
-      const pi: any = await verifyResp.json()
-      if (pi.status !== 'succeeded') {
-        return jsonResponse({ success: false, message: 'Payment not confirmed by Stripe' })
+    // Re-entrancy guard: if a payment is already open for this order, return it
+    // instead of creating a second Stripe Checkout session (prevents double charge).
+    if (order.status === 'pending_payment') {
+      const existing = await env.MERCHANT_DB.prepare(
+        `SELECT id, provider_payment_id FROM payments
+         WHERE order_id = ? AND merchant_id = ? AND status IN ('pending','processing')
+         ORDER BY created_at DESC LIMIT 1`
+      ).bind(orderId, env.MERCHANT_ID).first<{ id: string; provider_payment_id: string | null } | null>()
+      if (existing?.provider_payment_id) {
+        try {
+          const payment = await provider.getPayment(existing.provider_payment_id)
+          return jsonResponse({
+            paymentId: existing.id,
+            orderId: order.id,
+            checkoutUrl: payment.checkoutUrl,
+            amountCents: order.total_cents,
+            method: 'stripe',
+          })
+        } catch {}
+        return jsonResponse({ paymentId: existing.id, orderId: order.id, amountCents: order.total_cents, method: 'stripe' })
       }
     }
 
-    if (status !== 'success') {
-      return jsonResponse({ success: false, message: 'Payment not successful' })
+    if (!canTransitionOrder(order.status as any, 'pending_payment')) {
+      return errorResponse(orderTransitionError(order.status as any, 'pending_payment'), 409)
     }
 
-    const now = new Date().toISOString()
-    await env.MERCHANT_DB.prepare(
-      `UPDATE orders SET payment_status = 'paid', payment_id = ?,
-       status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END,
-       updated_at = ? WHERE id = ? AND merchant_id = ?`
-    ).bind(paymentId, now, orderId, env.MERCHANT_ID).run()
+    const origin = request.headers.get('origin') || `https://${env.MERCHANT_ID}.pages.dev`
+    const successUrl = `${origin}/order-status.html?order_id=${orderId}`
+    const cancelUrl = `${origin}/order.html`
 
-    return jsonResponse({ success: true })
-  } catch {
-    return errorResponse('Payment callback processing failed', 500)
+    const checkout = await provider.createCheckout({
+      orderId: order.id,
+      merchantId: env.MERCHANT_ID,
+      amountCents: order.total_cents,
+      currency: order.currency || 'CAD',
+      successUrl,
+      cancelUrl,
+    })
+
+    const now = new Date().toISOString()
+    const paymentId = generateId('pay_')
+    await env.MERCHANT_DB.prepare(
+      `INSERT INTO payments (id, merchant_id, order_id, provider, provider_payment_id, amount_cents, currency, status, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, 'stripe', ?, ?, ?, 'pending', ?, ?, ?)`
+    ).bind(
+      paymentId, env.MERCHANT_ID, order.id, checkout.providerPaymentId, order.total_cents,
+      order.currency || 'CAD', JSON.stringify({ orderId: order.id }), now, now
+    ).run()
+
+    await env.MERCHANT_DB.prepare(
+      `UPDATE orders SET status = 'pending_payment', payment_status = 'pending', payment_method = 'stripe', updated_at = ? WHERE id = ? AND merchant_id = ?`
+    ).bind(now, order.id, env.MERCHANT_ID).run()
+
+    return jsonResponse({
+      paymentId,
+      orderId: order.id,
+      checkoutUrl: checkout.checkoutUrl,
+      amountCents: order.total_cents,
+      method: 'stripe',
+    }, 201)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`创建支付失败: ${msg}`, 500)
   }
+}
+
+export async function handleStripeWebhook(request: Request, env: Env): Promise<Response> {
+  try {
+    const provider = getProvider(env)
+    const event = await provider.verifyWebhook(request)
+
+    // Idempotency: UNIQUE(provider, provider_event_id); skip already-processed events.
+    const eventId = generateId('evt_')
+    const insertResult = await env.MERCHANT_DB.prepare(
+      `INSERT INTO payment_events (id, merchant_id, provider, provider_event_id, type, data)
+       VALUES (?, ?, 'stripe', ?, ?, ?)`
+    ).bind(eventId, env.MERCHANT_ID, event.providerEventId, event.type, JSON.stringify(event.data)).run()
+
+    if (insertResult.meta.changes === 0) {
+      return jsonResponse({ received: true, duplicate: true })
+    }
+
+    await handleStripeEvent(env, event.type, event.data)
+
+    return jsonResponse({ received: true })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`Webhook 处理失败: ${msg}`, 400)
+  }
+}
+
+async function handleStripeEvent(env: Env, type: string, data: any): Promise<void> {
+  const now = new Date().toISOString()
+  const orderId = data.metadata?.order_id || data.client_reference_id
+
+  if (type === 'checkout.session.completed') {
+    const sessionId = data.id
+    const provider = getProvider(env)
+    let paymentStatus = mapStripeSessionStatus(data)
+    if (paymentStatus !== 'succeeded') {
+      const payment = await provider.getPayment(sessionId)
+      paymentStatus = payment.status
+    }
+    if (paymentStatus === 'succeeded') {
+      await markOrderPaid(env, orderId, sessionId, now)
+    }
+    return
+  }
+
+  if (type === 'payment_intent.succeeded') {
+    await markOrderPaid(env, orderId || data.payment_intent?.client_reference_id, data.id, now)
+    return
+  }
+
+  if (type === 'payment_intent.payment_failed' || type === 'checkout.session.async_payment_failed') {
+    await env.MERCHANT_DB.prepare(
+      `UPDATE orders SET payment_status = 'failed', updated_at = ? WHERE id = ? AND merchant_id = ?`
+    ).bind(now, orderId || '', env.MERCHANT_ID).run()
+    return
+  }
+}
+
+async function markOrderPaid(env: Env, orderId: string, providerPaymentId: string, now: string): Promise<void> {
+  if (!orderId) return
+
+  const order = await env.MERCHANT_DB.prepare(
+    `SELECT id, merchant_id, status, payment_status FROM orders WHERE id = ? AND merchant_id = ?`
+  ).bind(orderId, env.MERCHANT_ID).first<{ id: string; merchant_id: string; status: string; payment_status: string } | null>()
+  if (!order) return
+
+  const newPaymentStatus: any = 'succeeded'
+  if (order.payment_status !== 'succeeded' && !canTransitionPayment(order.payment_status as any, newPaymentStatus)) {
+    return
+  }
+
+  const targetOrderStatus: any = 'paid'
+  if (!canTransitionOrder(order.status as any, targetOrderStatus)) {
+    return
+  }
+
+  await env.MERCHANT_DB.prepare(
+    `UPDATE payments SET status = 'succeeded', provider_payment_id = COALESCE(provider_payment_id, ?), updated_at = ?
+     WHERE order_id = ? AND merchant_id = ? AND status IN ('pending','processing')`
+  ).bind(providerPaymentId, now, orderId, env.MERCHANT_ID).run()
+
+  await env.MERCHANT_DB.prepare(
+    `UPDATE orders SET status = 'paid', payment_status = 'succeeded', payment_id = ?, updated_at = ?
+     WHERE id = ? AND merchant_id = ?`
+  ).bind(providerPaymentId, now, orderId, env.MERCHANT_ID).run()
 }
 
 export async function handleQueryPayment(request: Request, env: Env, orderId: string): Promise<Response> {
   try {
+    const payment = await env.MERCHANT_DB.prepare(
+      `SELECT id, provider, provider_payment_id, amount_cents, currency, status, created_at
+       FROM payments WHERE order_id = ? AND merchant_id = ? ORDER BY created_at DESC LIMIT 1`
+    ).bind(orderId, env.MERCHANT_ID).first<any | null>()
+
     const order = await env.MERCHANT_DB.prepare(
-      'SELECT payment_status, payment_method, payment_id FROM orders WHERE id = ? AND merchant_id = ?'
-    ).bind(orderId, env.MERCHANT_ID).first<{ payment_status: string; payment_method: string | null; payment_id: string | null } | null>()
+      'SELECT status, payment_status, payment_method, payment_id FROM orders WHERE id = ? AND merchant_id = ?'
+    ).bind(orderId, env.MERCHANT_ID).first<any | null>()
+
     if (!order) {
-      return errorResponse('Order not found', 404)
+      return errorResponse('订单不存在', 404)
     }
 
-    return jsonResponse({ orderId, ...order })
-  } catch {
-    return errorResponse('Failed to query payment status', 500)
+    return jsonResponse({ orderId, orderStatus: order.status, payment: payment || null, ...order })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`查询支付失败: ${msg}`, 500)
   }
 }
