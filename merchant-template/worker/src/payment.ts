@@ -3,6 +3,7 @@ import { jsonResponse, errorResponse, generateId } from './utils'
 import { StripePaymentProvider, mapStripeSessionStatus, mapStripePaymentIntentStatus } from './payment-provider'
 import { canTransitionPayment, paymentTransitionError } from './payment-state'
 import { canTransitionOrder, orderTransitionError } from './order-state'
+import { notifyOrderChanged } from './notify-do'
 
 function getProvider(env: Env): StripePaymentProvider {
   return new StripePaymentProvider(env)
@@ -182,6 +183,13 @@ async function markOrderPaid(env: Env, orderId: string, providerPaymentId: strin
     `UPDATE orders SET status = 'paid', payment_status = 'succeeded', payment_id = ?, updated_at = ?
      WHERE id = ? AND merchant_id = ?`
   ).bind(providerPaymentId, now, orderId, env.MERCHANT_ID).run()
+
+  await notifyOrderChanged(env, {
+    type: 'order.paid',
+    orderId,
+    status: 'paid',
+    paymentStatus: 'succeeded',
+  })
 }
 
 export async function getPaymentStatus(env: Env, orderId: string): Promise<any> {

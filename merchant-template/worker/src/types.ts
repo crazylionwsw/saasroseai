@@ -15,6 +15,7 @@ export interface Env {
   AI: Ai;
   CHAT_ROOM_DO: DurableObjectNamespace;
   PHONE_CALL_DO: DurableObjectNamespace;
+  ORDER_NOTIFY_DO: DurableObjectNamespace;
   translations?: { get: (key: string) => Promise<R2ObjectBody | null> };
 }
 

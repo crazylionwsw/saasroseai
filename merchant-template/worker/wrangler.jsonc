@@ -20,7 +20,8 @@
   "durable_objects": {
     "bindings": [
       { "name": "CHAT_ROOM_DO", "class_name": "ChatRoom" },
-      { "name": "PHONE_CALL_DO", "class_name": "PhoneCall" }
+      { "name": "PHONE_CALL_DO", "class_name": "PhoneCall" },
+      { "name": "ORDER_NOTIFY_DO", "class_name": "OrderNotifier" }
     ]
   },
   "triggers": {

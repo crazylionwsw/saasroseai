@@ -3,6 +3,7 @@ import { jsonResponse, errorResponse, generateOrderId, paginate } from './utils'
 import { calculateQuote } from './pricing'
 import { canTransitionOrder, orderTransitionError, isInternalOrderStatus } from './order-state'
 import { verifyTableToken } from './qr'
+import { notifyOrderChanged } from './notify-do'
 
 export interface PlaceOrderInput {
   orderType?: string;
@@ -109,6 +110,16 @@ export async function placeOrder(env: Env, input: PlaceOrderInput): Promise<{ pa
     requiresPayment,
     createdAt: now,
   }
+
+  await notifyOrderChanged(env, {
+    type: 'order.created',
+    orderId,
+    status: payload.status,
+    totalCents: quote.totalCents,
+    customerName: input.customerName,
+    createdAt: now,
+  })
+
   return { payload, status: 201 }
 }
 
@@ -185,6 +196,13 @@ export async function handleUpdateOrderStatus(request: Request, env: Env, orderI
     await env.MERCHANT_DB.prepare(
       'UPDATE orders SET status = ?, updated_at = ? WHERE id = ? AND merchant_id = ?'
     ).bind(status, now, orderId, env.MERCHANT_ID).run()
+
+    await notifyOrderChanged(env, {
+      type: 'order.updated',
+      orderId,
+      status,
+      paymentStatus: current.payment_status,
+    })
 
     return jsonResponse({ id: orderId, status, updatedAt: now })
   } catch (e) {

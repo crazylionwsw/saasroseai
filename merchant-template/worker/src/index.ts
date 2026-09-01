@@ -6,6 +6,7 @@ import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderS
 import { handleCreatePayment, handleStripeWebhook, handleQueryPayment } from './payment'
 import { handleGenerateQr, handleVerifyQr } from './qr'
 import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
+import { getNotifierStub, notifyOrderChanged } from './notify-do'
 import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
 import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents } from './merchant-admin'
@@ -74,6 +75,9 @@ export default {
     if (url.pathname === '/ws') {
       return handleWebSocketUpgrade(request, env)
     }
+    if (url.pathname === '/api/notifications/ws') {
+      return handleNotificationsUpgrade(request, env)
+    }
     if (url.pathname === '/api/payments/webhook') {
       return handleStripeWebhook(request, env)
     }
@@ -114,6 +118,15 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
   }
   const id = env.CHAT_ROOM_DO.idFromName(env.MERCHANT_ID)
   const stub = env.CHAT_ROOM_DO.get(id)
+  return stub.fetch(request)
+}
+
+async function handleNotificationsUpgrade(request: Request, env: Env): Promise<Response> {
+  const upgradeHeader = request.headers.get('Upgrade')
+  if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+    return new Response('Expected WebSocket', { status: 426, headers: { 'Upgrade': 'websocket' } })
+  }
+  const stub = getNotifierStub(env)
   return stub.fetch(request)
 }
 
@@ -222,7 +235,7 @@ const API = window.location.origin;
 
 async function api(path,opts={}){const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json',...opts.headers}});return r.json()}
 
-function showPage(page){document.querySelectorAll('.sidebar a').forEach(a=>a.classList.remove('active'));document.querySelector(\`[data-page="\${page}"]\`)?.classList.add('active');document.getElementById('pageTitle').textContent=t('nav'+page.charAt(0).toUpperCase()+page.slice(1));window['render'+page.charAt(0).toUpperCase()+page.slice(1)]()}
+function showPage(page){document.querySelectorAll('.sidebar a').forEach(a=>a.classList.remove('active'));document.querySelector(\`[data-page="\${page}"]\`)?.classList.add('active');document.getElementById('pageTitle').textContent=t('nav'+page.charAt(0).toUpperCase()+page.slice(1));window.__page=page;window['render'+page.charAt(0).toUpperCase()+page.slice(1)]()}
 
 // Overview
 async function renderOverview(){
@@ -327,5 +340,36 @@ async function renderSuppliers(){renderInventory()}
 
 document.querySelectorAll('.sidebar a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();showPage(a.dataset.page)}))
 showPage('overview')
+
+// Real-time order notifications (WebSocket) with polling fallback
+(function(){
+  let toast=null;
+  function showToast(msg){
+    if(!toast){toast=document.createElement('div');toast.style.cssText='position:fixed;top:16px;right:16px;z-index:9999;background:#1a1a2e;color:#fff;padding:10px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.25);font-size:0.85rem;max-width:320px;';document.body.appendChild(toast)}
+    toast.textContent=msg;toast.style.display='block';clearTimeout(showToast._t);showToast._t=setTimeout(()=>{toast.style.display='none'},4500)
+  }
+  function refreshCurrent(){const p=window.__page;if(p==='overview')renderOverview();else if(p==='orders')renderOrders()}
+  function connectNotify(){
+    try{
+      const proto=location.protocol==='https:'?'wss:':'ws:'
+      const ws=new WebSocket(proto+'//'+location.host+'/api/notifications/ws')
+      ws.onmessage=function(e){
+        try{
+          const d=JSON.parse(e.data)
+          if(d.type==='notification'&&d.event){
+            const ev=d.event
+            const label=ev.type==='order.created'?'🆕 '+(t('newOrder')||'新订单'):ev.type==='order.paid'?'💰 '+(t('orderPaid')||'已支付'):'🔁 '+(t('orderUpdated')||'订单更新')
+            showToast(label+' '+ev.orderId)
+            refreshCurrent()
+          }
+        }catch(_){}
+      }
+      ws.onclose=function(){setTimeout(connectNotify,3000)}
+      ws.onerror=function(){try{ws.close()}catch(_){}}
+    }catch(_){}
+  }
+  connectNotify()
+  setInterval(refreshCurrent,20000)
+})();
 </script></body></html>`
 }
