@@ -1,19 +1,23 @@
-import { Env } from './types'
+import { Env, PaymentProvider } from './types'
 import { jsonResponse, errorResponse, generateId } from './utils'
 import { StripePaymentProvider, mapStripeSessionStatus, mapStripePaymentIntentStatus } from './payment-provider'
+import { SquarePaymentProvider } from './square-provider'
 import { canTransitionPayment, paymentTransitionError } from './payment-state'
 import { canTransitionOrder, orderTransitionError } from './order-state'
 import { notifyOrderChanged } from './notify-do'
 import { getConnectedStripeAccount } from './stripe-connect'
 
-function getProvider(env: Env): StripePaymentProvider {
-  return new StripePaymentProvider(env)
+type PaymentMethod = 'stripe' | 'square'
+
+function getProvider(env: Env, method: PaymentMethod): PaymentProvider {
+  return method === 'square' ? new SquarePaymentProvider(env) : new StripePaymentProvider(env)
 }
 
 export async function createPaymentForOrder(
   env: Env,
   orderId: string,
-  origin: string
+  origin: string,
+  method: PaymentMethod = 'stripe'
 ): Promise<{ paymentId: string; checkoutUrl: string; amountCents: number }> {
   const order = await env.MERCHANT_DB.prepare(
     `SELECT id, merchant_id, total_cents, status, payment_status, currency
@@ -24,16 +28,16 @@ export async function createPaymentForOrder(
   if (!order) throw new Error('订单不存在')
   if (order.total_cents <= 0) throw new Error('订单金额无效')
 
-  const provider = getProvider(env)
+  const provider = getProvider(env, method)
 
   // Re-entrancy guard: if a payment is already open for this order, return it
-  // instead of creating a second Stripe Checkout session (prevents double charge).
+  // instead of creating a second checkout session (prevents double charge).
   if (order.status === 'pending_payment') {
     const existing = await env.MERCHANT_DB.prepare(
       `SELECT id, provider_payment_id FROM payments
-       WHERE order_id = ? AND merchant_id = ? AND status IN ('pending','processing')
+       WHERE order_id = ? AND merchant_id = ? AND provider = ? AND status IN ('pending','processing')
        ORDER BY created_at DESC LIMIT 1`
-    ).bind(orderId, env.MERCHANT_ID).first<{ id: string; provider_payment_id: string | null } | null>()
+    ).bind(orderId, env.MERCHANT_ID, method).first<{ id: string; provider_payment_id: string | null } | null>()
     if (existing?.provider_payment_id) {
       try {
         const payment = await provider.getPayment(existing.provider_payment_id)
@@ -51,7 +55,7 @@ export async function createPaymentForOrder(
   const successUrl = `${origin}/order-status.html?order_id=${order.id}`
   const cancelUrl = `${origin}/order.html`
 
-  const connectedAccountId = await getConnectedStripeAccount(env)
+  const connectedAccountId = method === 'stripe' ? await getConnectedStripeAccount(env) : null
 
   const checkout = await provider.createCheckout({
     orderId: order.id,
@@ -67,15 +71,15 @@ export async function createPaymentForOrder(
   const paymentId = generateId('pay_')
   await env.MERCHANT_DB.prepare(
     `INSERT INTO payments (id, merchant_id, order_id, provider, provider_payment_id, amount_cents, currency, status, metadata, created_at, updated_at)
-     VALUES (?, ?, ?, 'stripe', ?, ?, ?, 'pending', ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`
   ).bind(
-    paymentId, env.MERCHANT_ID, order.id, checkout.providerPaymentId, order.total_cents,
+    paymentId, env.MERCHANT_ID, order.id, method, checkout.providerPaymentId, order.total_cents,
     order.currency || 'CAD', JSON.stringify({ orderId: order.id }), now, now
   ).run()
 
   await env.MERCHANT_DB.prepare(
-    `UPDATE orders SET status = 'pending_payment', payment_status = 'pending', payment_method = 'stripe', updated_at = ? WHERE id = ? AND merchant_id = ?`
-  ).bind(now, order.id, env.MERCHANT_ID).run()
+    `UPDATE orders SET status = 'pending_payment', payment_status = 'pending', payment_method = ?, updated_at = ? WHERE id = ? AND merchant_id = ?`
+  ).bind(method, now, order.id, env.MERCHANT_ID).run()
 
   return { paymentId, checkoutUrl: checkout.checkoutUrl, amountCents: order.total_cents }
 }
@@ -87,16 +91,17 @@ export async function handleCreatePayment(request: Request, env: Env): Promise<R
     if (!orderId) {
       return errorResponse('缺少订单号', 400)
     }
+    const method: PaymentMethod = body.method === 'square' ? 'square' : 'stripe'
 
     const origin = request.headers.get('origin') || `https://${env.MERCHANT_ID}.pages.dev`
-    const payment = await createPaymentForOrder(env, orderId, origin)
+    const payment = await createPaymentForOrder(env, orderId, origin, method)
 
     return jsonResponse({
       paymentId: payment.paymentId,
       orderId,
       checkoutUrl: payment.checkoutUrl,
       amountCents: payment.amountCents,
-      method: 'stripe',
+      method,
     }, 201)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -104,28 +109,67 @@ export async function handleCreatePayment(request: Request, env: Env): Promise<R
   }
 }
 
+async function recordPaymentEvent(env: Env, provider: string, event: { providerEventId: string; type: string; data: any }): Promise<boolean> {
+  const eventId = generateId('evt_')
+  const insertResult = await env.MERCHANT_DB.prepare(
+    `INSERT INTO payment_events (id, merchant_id, provider, provider_event_id, type, data)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(eventId, env.MERCHANT_ID, provider, event.providerEventId, event.type, JSON.stringify(event.data)).run()
+  return insertResult.meta.changes > 0
+}
+
 export async function handleStripeWebhook(request: Request, env: Env): Promise<Response> {
   try {
-    const provider = getProvider(env)
+    const provider = getProvider(env, 'stripe')
     const event = await provider.verifyWebhook(request)
-
-    // Idempotency: UNIQUE(provider, provider_event_id); skip already-processed events.
-    const eventId = generateId('evt_')
-    const insertResult = await env.MERCHANT_DB.prepare(
-      `INSERT INTO payment_events (id, merchant_id, provider, provider_event_id, type, data)
-       VALUES (?, ?, 'stripe', ?, ?, ?)`
-    ).bind(eventId, env.MERCHANT_ID, event.providerEventId, event.type, JSON.stringify(event.data)).run()
-
-    if (insertResult.meta.changes === 0) {
-      return jsonResponse({ received: true, duplicate: true })
-    }
-
+    const processed = await recordPaymentEvent(env, 'stripe', event)
+    if (!processed) return jsonResponse({ received: true, duplicate: true })
     await handleStripeEvent(env, event.type, event.data)
-
     return jsonResponse({ received: true })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return errorResponse(`Webhook 处理失败: ${msg}`, 400)
+  }
+}
+
+export async function handleSquareWebhook(request: Request, env: Env): Promise<Response> {
+  try {
+    const provider = getProvider(env, 'square')
+    const event = await provider.verifyWebhook(request)
+    const processed = await recordPaymentEvent(env, 'square', event)
+    if (!processed) return jsonResponse({ received: true, duplicate: true })
+    await handleSquareEvent(env, event.type, event.data)
+    return jsonResponse({ received: true })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`Square Webhook 处理失败: ${msg}`, 400)
+  }
+}
+
+async function handleSquareEvent(env: Env, type: string, data: any): Promise<void> {
+  const now = new Date().toISOString()
+  if (type === 'payment.updated' && data.payment?.status === 'COMPLETED') {
+    const linkId = data.payment.payment_link_id
+    if (linkId) {
+      const row = await env.MERCHANT_DB.prepare(
+        'SELECT order_id FROM payments WHERE provider_payment_id = ? AND merchant_id = ?'
+      ).bind(linkId, env.MERCHANT_ID).first<{ order_id: string } | null>()
+      if (row?.order_id) {
+        await markOrderPaid(env, row.order_id, data.payment.id, now)
+      }
+    }
+    return
+  }
+  if (type === 'refund.updated' && data.refund?.status === 'COMPLETED') {
+    const row = await env.MERCHANT_DB.prepare(
+      'SELECT order_id FROM payments WHERE provider_payment_id = ? AND merchant_id = ?'
+    ).bind(data.refund.payment_id, env.MERCHANT_ID).first<{ order_id: string } | null>()
+    if (row?.order_id) {
+      await env.MERCHANT_DB.prepare(
+        `UPDATE orders SET status = 'refunded', payment_status = 'refunded', updated_at = ? WHERE id = ? AND merchant_id = ?`
+      ).bind(now, row.order_id, env.MERCHANT_ID).run()
+    }
+    return
   }
 }
 
@@ -135,7 +179,7 @@ async function handleStripeEvent(env: Env, type: string, data: any): Promise<voi
 
   if (type === 'checkout.session.completed') {
     const sessionId = data.id
-    const provider = getProvider(env)
+    const provider = getProvider(env, 'stripe')
     let paymentStatus = mapStripeSessionStatus(data)
     if (paymentStatus !== 'succeeded') {
       const payment = await provider.getPayment(sessionId)

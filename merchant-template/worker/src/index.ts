@@ -3,9 +3,10 @@ import { Env } from './types'
 import { verifyMerchant } from './auth-middleware'
 import { handleGenerateSite, handleGetTemplateList, handleGeneratePreview } from './storefront'
 import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderStatus, handleGetMenu } from './order'
-import { handleCreatePayment, handleStripeWebhook, handleQueryPayment } from './payment'
+import { handleCreatePayment, handleStripeWebhook, handleQueryPayment, handleSquareWebhook } from './payment'
 import { handleGenerateQr, handleVerifyQr } from './qr'
 import { handleStartStripeConnect, handleStripeConnectCallback } from './stripe-connect'
+import { handleStartSquareConnect, handleSquareConnectCallback } from './square-connect'
 import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
 import { getNotifierStub, notifyOrderChanged } from './notify-do'
 import { handleGetTaxRules, handleUpdateTaxRules } from './tax'
@@ -45,6 +46,9 @@ router.get('/api/payments/:orderId', handleQueryPayment)
 
 router.post('/api/stripe/connect/start', handleStartStripeConnect)
 router.get('/api/stripe/connect/callback', handleStripeConnectCallback)
+
+router.post('/api/square/connect/start', handleStartSquareConnect)
+router.get('/api/square/connect/callback', handleSquareConnectCallback)
 
 router.post('/api/qr', handleGenerateQr)
 router.get('/api/qr/verify', handleVerifyQr)
@@ -94,6 +98,9 @@ export default {
     }
     if (url.pathname === '/api/payments/webhook') {
       return handleStripeWebhook(request, env)
+    }
+    if (url.pathname === '/api/payments/webhook/square') {
+      return handleSquareWebhook(request, env)
     }
     const authResult = await verifyMerchant(env)
     if (authResult.status !== 'active') {

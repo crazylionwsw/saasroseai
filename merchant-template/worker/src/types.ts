@@ -10,6 +10,11 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PUBLISHABLE_KEY?: string;
   STRIPE_CLIENT_ID?: string;
+  SQUARE_ACCESS_TOKEN?: string;
+  SQUARE_LOCATION_ID?: string;
+  SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
+  SQUARE_CLIENT_ID?: string;
+  SQUARE_CLIENT_SECRET?: string;
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_PHONE_NUMBER?: string;

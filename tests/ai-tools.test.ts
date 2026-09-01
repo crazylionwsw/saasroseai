@@ -44,7 +44,7 @@ function createToolsEnv() {
             })
           }
           if (sql.includes("SET status = 'pending_payment'")) {
-            const row = orders.find((o) => o.id === args[1] && o.merchant_id === args[2])
+            const row = orders.find((o) => o.id === args[2] && o.merchant_id === args[3])
             if (row) { row.status = 'pending_payment'; row.payment_status = 'pending' }
             return { meta: { changes: 1 } }
           }
