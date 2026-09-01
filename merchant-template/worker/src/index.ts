@@ -178,6 +178,7 @@ function dashboardHtml(merchantName: string, lang: string): string {
       itemAdd: '添加菜品', itemDelete: '删除菜品', save: '保存', saved: '已保存',
       settingsHours: '营业时间', settingsTax: '税率', settingsOrdering: '启用点餐',
       settingsPayment: '启用支付', settingsChat: '启用客服', settingsPhone: '启用电话',
+      actions: '操作',
       totalOrders: '总订单', todayOrders: '今日订单', monthlyOrders: '本月订单',
       totalRevenue: '总收入', todayRevenue: '今日收入', monthlyRevenue: '本月收入',
       pendingOrders: '待处理', recentOrders: '最近订单', topItems: '热销菜品',
@@ -194,6 +195,7 @@ function dashboardHtml(merchantName: string, lang: string): string {
       save: 'Save', saved: 'Saved', settingsHours: 'Business Hours', settingsTax: 'Tax',
       settingsOrdering: 'Enable Ordering', settingsPayment: 'Enable Payment',
       settingsChat: 'Enable Chat', settingsPhone: 'Enable Phone',
+      actions: 'Actions',
       totalOrders: 'Total Orders', todayOrders: 'Today',
       monthlyOrders: 'This Month', totalRevenue: 'Total Revenue', todayRevenue: 'Today',
       monthlyRevenue: 'This Month', pendingOrders: 'Pending', recentOrders: 'Recent Orders',
@@ -211,6 +213,7 @@ function dashboardHtml(merchantName: string, lang: string): string {
       save: 'Enregistrer', saved: 'Enregistré', settingsHours: 'Horaires', settingsTax: 'Taxes',
       settingsOrdering: 'Activer Commande', settingsPayment: 'Activer Paiement',
       settingsChat: 'Activer Chat', settingsPhone: 'Activer Téléphone',
+      actions: 'Actions',
       totalOrders: 'Total Commandes', todayOrders: 'Aujourd\'hui',
       monthlyOrders: 'Ce Mois', totalRevenue: 'Revenu Total', todayRevenue: 'Aujourd\'hui',
       monthlyRevenue: 'Ce Mois', pendingOrders: 'En Attente', recentOrders: 'Commandes Récentes',
@@ -313,8 +316,28 @@ async function renderOrders(){
   \`
 }
 
+function statusActions(o){
+  const map={
+    'draft': [['confirm','confirmed']],
+    'pending_payment': [['confirm','confirmed'],['cancel','cancelled']],
+    'paid': [['confirm','confirmed'],['cancel','cancelled']],
+    'confirmed': [['prepare','preparing'],['cancel','cancelled']],
+    'preparing': [['ready','ready'],['cancel','cancelled']],
+    'ready': [['complete','completed']],
+  }
+  const acts=map[o.status]||[]
+  if(!acts.length)return '-'
+  return acts.map(function(a){
+    const label=a[0],to=a[1]
+    return '<button class="btn btn-sm '+(to==='cancelled'?'btn-danger':'btn-primary')+'" onclick="setOrderStatus(\''+o.id+'\',\''+to+'\')" style="margin-right:4px">'+label+'</button>'
+  }).join('')
+}
+window.setOrderStatus=async function(id,status){
+  try{await api('/api/orders/'+id+'/status',{method:'PUT',body:JSON.stringify({status})})}catch(e){alert(e.message||'failed')}
+  if(window.__page==='orders')renderOrders();else if(window.__page==='overview')renderOverview()
+}
 function tableHtml(orders){
-  return \`<table><thead><tr><th>\${t('orderId')}</th><th>\${t('customer')}</th><th>\${t('items')}</th><th>\${t('total')}</th><th>\${t('status')}</th><th>\${t('time')}</th></tr></thead><tbody>\${orders.map(o=>\`<tr><td>\${o.id}</td><td>\${o.customer_name||'-'}</td><td>\${typeof o.items==='string'?o.items.slice(0,40):JSON.stringify(o.items||[]).slice(0,40)}</td><td>$\${(o.total||0).toFixed(2)}</td><td><span class="status \${o.status||'pending'}">\${o.status||'pending'}</span></td><td>\${(o.created_at||'').slice(0,16)}</td></tr>\`).join('')}</tbody></table>\`
+  return \`<table><thead><tr><th>\${t('orderId')}</th><th>\${t('customer')}</th><th>\${t('items')}</th><th>\${t('total')}</th><th>\${t('status')}</th><th>\${t('actions')}</th><th>\${t('time')}</th></tr></thead><tbody>\${orders.map(o=>\`<tr><td>\${o.id}</td><td>\${o.customer_name||'-'}</td><td>\${typeof o.items==='string'?o.items.slice(0,40):JSON.stringify(o.items||[]).slice(0,40)}</td><td>$\${((o.total_cents!=null?o.total_cents:(o.total||0)*100)/100).toFixed(2)}</td><td><span class="status \${o.status||'draft'}">\${o.status||'draft'}</span></td><td>\${statusActions(o)}</td><td>\${(o.created_at||'').slice(0,16)}</td></tr>\`).join('')}</tbody></table>\`
 }
 
 async function exportCSV(){window.open(API+'/api/deliveries/export?format=csv&days=7')}
