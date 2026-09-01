@@ -9,6 +9,7 @@ export interface Env {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PUBLISHABLE_KEY?: string;
+  STRIPE_CLIENT_ID?: string;
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_PHONE_NUMBER?: string;
@@ -149,6 +150,7 @@ export interface PaymentProvider {
     currency: string;
     successUrl: string;
     cancelUrl: string;
+    connectedAccountId?: string;
   }): Promise<CheckoutResult>;
   getPayment(providerPaymentId: string): Promise<PaymentResult>;
   refund(providerPaymentId: string, amountCents: number, reason?: string): Promise<RefundResult>;

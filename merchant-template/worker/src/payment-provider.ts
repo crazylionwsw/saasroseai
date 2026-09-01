@@ -11,12 +11,13 @@ async function stripeGet(path: string, secretKey: string): Promise<any> {
   return data
 }
 
-async function stripePost(path: string, secretKey: string, body: Record<string, string>): Promise<any> {
+async function stripePost(path: string, secretKey: string, body: Record<string, string>, extraHeaders?: Record<string, string>): Promise<any> {
   const resp = await fetch(`${STRIPE_API}${path}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${secretKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...(extraHeaders || {}),
     },
     body: new URLSearchParams(body).toString(),
   })
@@ -35,9 +36,14 @@ export class StripePaymentProvider implements PaymentProvider {
     currency: string;
     successUrl: string;
     cancelUrl: string;
+    connectedAccountId?: string;
   }): Promise<CheckoutResult> {
     const secretKey = this.env.STRIPE_SECRET_KEY
     if (!secretKey) throw new Error('支付未配置')
+    const headers: Record<string, string> = {}
+    if (params.connectedAccountId) {
+      headers['Stripe-Account'] = params.connectedAccountId
+    }
     const session = await stripePost('/checkout/sessions', secretKey, {
       mode: 'payment',
       currency: params.currency.toLowerCase(),
@@ -49,7 +55,7 @@ export class StripePaymentProvider implements PaymentProvider {
       cancel_url: params.cancelUrl,
       client_reference_id: params.orderId,
       metadata: JSON.stringify({ order_id: params.orderId, merchant_id: params.merchantId }),
-    })
+    }, headers)
     return { checkoutUrl: session.url, providerPaymentId: session.id }
   }
 

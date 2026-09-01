@@ -144,6 +144,16 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_merchant ON chat_sessions(merchant_id, started_at DESC);
 
+-- Phase 7: Payment Accounts (TASK-033, Stripe Connect)
+CREATE TABLE IF NOT EXISTS payment_accounts (
+  merchant_id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  provider_account_id TEXT NOT NULL,
+  status TEXT DEFAULT 'active',
+  connected_at TEXT DEFAULT (datetime('now')),
+  metadata TEXT
+);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,

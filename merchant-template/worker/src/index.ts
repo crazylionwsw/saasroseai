@@ -5,6 +5,7 @@ import { handleGenerateSite, handleGetTemplateList, handleGeneratePreview } from
 import { handleCreateOrder, handleGetOrder, handleListOrders, handleUpdateOrderStatus, handleGetMenu } from './order'
 import { handleCreatePayment, handleStripeWebhook, handleQueryPayment } from './payment'
 import { handleGenerateQr, handleVerifyQr } from './qr'
+import { handleStartStripeConnect, handleStripeConnectCallback } from './stripe-connect'
 import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
 import { getNotifierStub, notifyOrderChanged } from './notify-do'
 import { handleGetTaxRules, handleUpdateTaxRules } from './tax'
@@ -41,6 +42,9 @@ router.post('/api/cart/calculate', handleCalculateCart)
 
 router.post('/api/payments/create', handleCreatePayment)
 router.get('/api/payments/:orderId', handleQueryPayment)
+
+router.post('/api/stripe/connect/start', handleStartStripeConnect)
+router.get('/api/stripe/connect/callback', handleStripeConnectCallback)
 
 router.post('/api/qr', handleGenerateQr)
 router.get('/api/qr/verify', handleVerifyQr)

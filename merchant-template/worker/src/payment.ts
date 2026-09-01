@@ -4,6 +4,7 @@ import { StripePaymentProvider, mapStripeSessionStatus, mapStripePaymentIntentSt
 import { canTransitionPayment, paymentTransitionError } from './payment-state'
 import { canTransitionOrder, orderTransitionError } from './order-state'
 import { notifyOrderChanged } from './notify-do'
+import { getConnectedStripeAccount } from './stripe-connect'
 
 function getProvider(env: Env): StripePaymentProvider {
   return new StripePaymentProvider(env)
@@ -50,6 +51,8 @@ export async function createPaymentForOrder(
   const successUrl = `${origin}/order-status.html?order_id=${order.id}`
   const cancelUrl = `${origin}/order.html`
 
+  const connectedAccountId = await getConnectedStripeAccount(env)
+
   const checkout = await provider.createCheckout({
     orderId: order.id,
     merchantId: env.MERCHANT_ID,
@@ -57,6 +60,7 @@ export async function createPaymentForOrder(
     currency: order.currency || 'CAD',
     successUrl,
     cancelUrl,
+    connectedAccountId: connectedAccountId || undefined,
   })
 
   const now = new Date().toISOString()
