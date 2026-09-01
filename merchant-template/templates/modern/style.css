@@ -510,6 +510,21 @@ ul { list-style: none; }
   cursor: pointer;
 }
 
+.order-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.88rem;
+}
+
+.order-tip select {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  font-size: 0.88rem;
+  font-family: var(--font);
+  background: var(--bg);
+}
+
 .order-form input,
 .order-form textarea {
   width: 100%;

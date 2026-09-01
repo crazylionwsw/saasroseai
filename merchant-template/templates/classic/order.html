@@ -55,6 +55,16 @@
           <input type="tel" name="phone" placeholder="{{T:form_phone}}" required>
           <input type="text" name="address" placeholder="{{T:form_address}}" required>
           <textarea name="note" placeholder="{{T:form_note}}"></textarea>
+          <div class="order-tip">
+            <label for="tip-select">{{T:tip_label}}</label>
+            <select name="tipPercent" id="tip-select">
+              <option value="0">{{T:tip_0}}</option>
+              <option value="10">10%</option>
+              <option value="15" selected>15%</option>
+              <option value="18">18%</option>
+              <option value="20">20%</option>
+            </select>
+          </div>
           <button type="submit" class="btn">{{T:form_submit}}</button>
         </form>
       </div>

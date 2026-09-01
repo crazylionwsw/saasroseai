@@ -7,6 +7,7 @@ import { handleCreatePayment, handleStripeWebhook, handleQueryPayment } from './
 import { handleGenerateQr, handleVerifyQr } from './qr'
 import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
 import { getNotifierStub, notifyOrderChanged } from './notify-do'
+import { handleGetTaxRules, handleUpdateTaxRules } from './tax'
 import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
 import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents } from './merchant-admin'
@@ -54,6 +55,9 @@ router.get('/api/merchant/profile', handleGetProfile)
 router.put('/api/merchant/profile', handleUpdateProfile)
 router.put('/api/merchant/menu', handleUpdateMenu)
 router.post('/api/merchant/events', handleAnalyticsEvents)
+
+router.get('/api/merchant/tax', handleGetTaxRules)
+router.put('/api/merchant/tax', handleUpdateTaxRules)
 
 router.get('/api/stores', handleListStores)
 router.post('/api/stores', handleCreateStore)

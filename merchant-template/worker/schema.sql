@@ -117,6 +117,17 @@ CREATE TABLE IF NOT EXISTS cart_items (
 );
 CREATE INDEX IF NOT EXISTS idx_cart_items_cart ON cart_items(cart_id);
 
+-- Phase 3: Tax Engine (TASK-013)
+CREATE TABLE IF NOT EXISTS tax_rules (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  tax_code TEXT NOT NULL,
+  rate_bp INTEGER NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tax_rules_merchant ON tax_rules(merchant_id);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,

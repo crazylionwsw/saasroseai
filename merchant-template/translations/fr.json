@@ -34,6 +34,8 @@
   "order_type_pickup": "À emporter",
   "order_type_dine_in": "Sur place",
   "order_redirecting": "Redirection vers le paiement...",
+  "tip_label": "Pourboire",
+  "tip_0": "Sans pourboire",
   "order_success_title": "Commande réussie !",
   "order_success_id": "Commande n°",
   "order_success_total": "Total",

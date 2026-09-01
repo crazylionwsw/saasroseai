@@ -34,6 +34,8 @@
   "order_type_pickup": "自取",
   "order_type_dine_in": "堂食",
   "order_redirecting": "跳转支付中...",
+  "tip_label": "小费",
+  "tip_0": "无小费",
   "order_success_title": "下单成功",
   "order_success_id": "订单号",
   "order_success_total": "总价",

@@ -88,6 +88,16 @@ export function calculateLines(
 
 export async function getTaxRateBp(env: Env): Promise<number> {
   try {
+    const rules = await env.MERCHANT_DB.prepare(
+      `SELECT tax_code, rate_bp FROM tax_rules WHERE merchant_id = ? AND is_active = 1`
+    ).bind(env.MERCHANT_ID).all<{ tax_code: string; rate_bp: number }>()
+    if (rules.results && rules.results.length > 0) {
+      const total = rules.results.reduce((sum, r) => sum + (Number(r.rate_bp) || 0), 0)
+      if (total >= 0) return total
+    }
+  } catch {}
+  // Fallback: single configurable rate on merchant_info (basis points, default 5.00%)
+  try {
     const row = await env.MERCHANT_DB.prepare(
       'SELECT tax_rate FROM merchant_info WHERE id = ?'
     ).bind(env.MERCHANT_ID).first<{ tax_rate: number | null }>()

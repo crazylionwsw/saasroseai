@@ -34,6 +34,8 @@
   "order_type_pickup": "Pickup",
   "order_type_dine_in": "Dine-in",
   "order_redirecting": "Redirecting to payment...",
+  "tip_label": "Tip",
+  "tip_0": "No tip",
   "order_success_title": "Order Placed!",
   "order_success_id": "Order #",
   "order_success_total": "Total",

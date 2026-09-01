@@ -230,6 +230,7 @@ document.addEventListener('DOMContentLoaded', function () {
         customerPhone: phone.value.trim(),
         customerAddress: address.value.trim(),
         note: note.value.trim(),
+        tipPercent: parseInt(orderForm.querySelector('[name="tipPercent"]').value || '0', 10) || 0,
         items: cart.map(function (item) { return { id: item.id, qty: item.qty }; })
       };
       if (qrToken) payload.qrToken = qrToken;
