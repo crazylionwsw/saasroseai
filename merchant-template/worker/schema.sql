@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS merchant_info (
   language TEXT DEFAULT 'zh',
   currency_symbol TEXT DEFAULT '¥',
   tax_rate INTEGER DEFAULT 500,
+  timezone TEXT DEFAULT 'America/Vancouver',
+  plan TEXT DEFAULT 'basic',
   drive_token_encrypted TEXT,
   drive_folder_id TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
@@ -338,6 +340,8 @@ CREATE TABLE IF NOT EXISTS delivery_orders (
   items TEXT,
   total REAL DEFAULT 0,
   platform_fee REAL DEFAULT 0,
+  total_cents INTEGER DEFAULT 0,
+  platform_fee_cents INTEGER DEFAULT 0,
   notes TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))

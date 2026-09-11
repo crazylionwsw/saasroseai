@@ -4,6 +4,7 @@ import { calculateQuote } from './pricing'
 import { canTransitionOrder, orderTransitionError, isInternalOrderStatus } from './order-state'
 import { verifyTableToken } from './qr'
 import { notifyOrderChanged } from './notify-do'
+import { enforceOrderQuota } from './usage'
 
 export interface PlaceOrderInput {
   orderType?: string;
@@ -46,6 +47,11 @@ export async function placeOrder(env: Env, input: PlaceOrderInput): Promise<{ pa
     if (existing) {
       return { payload: existing, status: 200 }
     }
+  }
+
+  const quota = await enforceOrderQuota(env)
+  if (!quota.allowed) {
+    throw new Error(quota.message || '订单已达套餐上限')
   }
 
   const quote = await calculateQuote(env, items, input.tipPercent)

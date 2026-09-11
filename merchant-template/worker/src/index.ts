@@ -16,7 +16,8 @@ import { handlePhoneConfigure, handlePhoneStatus } from './phone-config'
 import { handleDashboardStats, handleSalesReport, handleTopItems, handleOrderStatusBreakdown } from './dashboard'
 import { handleGetProfile, handleUpdateProfile, handleUpdateMenu, handleAnalyticsEvents, handleGetKnowledgeConfig, handleUpdateKnowledgeConfig, handleAiAnalytics } from './merchant-admin'
 import { handleListStores, handleCreateStore, handleUpdateStore, handleDeleteStore, handleStoreAnalytics } from './stores'
-import { handleListDeliveries, handleExportDelivery, handleListInventory, handleUpdateInventory, handleDeleteInventory, handleListSuppliers, handleCreateSupplier } from './delivery'
+import { handleListDeliveries, handleExportDelivery, handleListInventory, handleUpdateInventory, handleDeleteInventory, handleListSuppliers, handleCreateSupplier, handleCreateDelivery, handleUpdateDelivery } from './delivery'
+import { handleGetUsage } from './usage'
 import { jsonResponse, errorResponse } from './utils'
 
 const { preflight, corsify } = cors()
@@ -73,6 +74,7 @@ router.put('/api/merchant/profile', handleUpdateProfile)
 router.put('/api/merchant/menu', handleUpdateMenu)
 router.post('/api/merchant/events', handleAnalyticsEvents)
 router.get('/api/merchant/analytics/ai', handleAiAnalytics)
+router.get('/api/usage', handleGetUsage)
 
 router.get('/api/merchant/tax', handleGetTaxRules)
 router.put('/api/merchant/tax', handleUpdateTaxRules)
@@ -88,6 +90,8 @@ router.delete('/api/stores/:storeId', handleDeleteStore)
 router.get('/api/stores/:storeId/analytics', handleStoreAnalytics)
 
 router.get('/api/deliveries', handleListDeliveries)
+router.post('/api/deliveries', handleCreateDelivery)
+router.put('/api/deliveries/:deliveryId', (request: Request, env: Env) => handleUpdateDelivery(request, env, (request as any).params.deliveryId))
 router.get('/api/deliveries/export', handleExportDelivery)
 router.get('/api/inventory', handleListInventory)
 router.post('/api/inventory', handleUpdateInventory)

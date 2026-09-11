@@ -4,7 +4,7 @@ import { jsonResponse, errorResponse, generateId } from './utils'
 export async function handleGetProfile(request: Request, env: Env): Promise<Response> {
   try {
     const merchant = await env.MERCHANT_DB.prepare(
-      'SELECT id, name, slogan, description, phone, email, address, business_hours, logo_url, cover_url, social_media, primary_color, template_id, language, currency_symbol FROM merchant_info WHERE id = ?'
+      'SELECT id, name, slogan, description, phone, email, address, business_hours, logo_url, cover_url, social_media, primary_color, template_id, language, currency_symbol, timezone, plan FROM merchant_info WHERE id = ?'
     ).bind(env.MERCHANT_ID).first()
     if (!merchant) return errorResponse('商户不存在', 404)
     return jsonResponse(merchant)
@@ -16,7 +16,7 @@ export async function handleGetProfile(request: Request, env: Env): Promise<Resp
 export async function handleUpdateProfile(request: Request, env: Env): Promise<Response> {
   try {
     const body = await request.json<any>()
-    const allowedFields = ['name', 'slogan', 'description', 'phone', 'email', 'address', 'business_hours', 'logo_url', 'cover_url', 'primary_color', 'template_id', 'language', 'currency_symbol', 'social_media', 'tax_rate', 'enable_ordering', 'enable_payment', 'enable_chat', 'enable_phone']
+    const allowedFields = ['name', 'slogan', 'description', 'phone', 'email', 'address', 'business_hours', 'logo_url', 'cover_url', 'primary_color', 'template_id', 'language', 'currency_symbol', 'social_media', 'tax_rate', 'timezone', 'enable_ordering', 'enable_payment', 'enable_chat', 'enable_phone']
     const updates: string[] = []
     const values: any[] = []
     for (const field of allowedFields) {

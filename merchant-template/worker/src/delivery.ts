@@ -16,6 +16,56 @@ export async function handleListDeliveries(request: Request, env: Env): Promise<
   }
 }
 
+const DELIVERY_STATUSES = ['pending', 'accepted', 'preparing', 'ready', 'picked_up', 'delivering', 'delivered', 'cancelled']
+
+export async function handleCreateDelivery(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await request.json<{
+      orderId?: string; platform?: string; platformOrderId?: string;
+      customerName?: string; customerPhone?: string; customerAddress?: string;
+      items?: string; totalCents?: number; platformFeeCents?: number; notes?: string;
+    }>()
+    const platform = (body.platform || '').trim()
+    if (!platform) return errorResponse('缺少配送平台 (platform)', 400)
+    const totalCents = Math.max(0, Math.floor(Number(body.totalCents) || 0))
+    const feeCents = Math.max(0, Math.floor(Number(body.platformFeeCents) || 0))
+
+    const id = generateId('del_')
+    const now = new Date().toISOString()
+    await env.MERCHANT_DB.prepare(
+      `INSERT INTO delivery_orders (id, merchant_id, order_id, platform, platform_order_id, delivery_status,
+         customer_name, customer_phone, customer_address, items, total, platform_fee, total_cents, platform_fee_cents, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, env.MERCHANT_ID, body.orderId || null, platform, body.platformOrderId || null,
+      body.customerName || null, body.customerPhone || null, body.customerAddress || null,
+      body.items || null, totalCents / 100, feeCents / 100, totalCents, feeCents, body.notes || null, now, now
+    ).run()
+
+    return jsonResponse({ success: true, id, deliveryStatus: 'pending' }, 201)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`创建配送单失败: ${msg}`, 400)
+  }
+}
+
+export async function handleUpdateDelivery(request: Request, env: Env, deliveryId: string): Promise<Response> {
+  try {
+    const body = await request.json<{ deliveryStatus?: string }>()
+    const status = body.deliveryStatus || ''
+    if (!DELIVERY_STATUSES.includes(status)) return errorResponse('无效的配送状态', 400)
+    const now = new Date().toISOString()
+    const result = await env.MERCHANT_DB.prepare(
+      `UPDATE delivery_orders SET delivery_status = ?, updated_at = ? WHERE id = ? AND merchant_id = ?`
+    ).bind(status, now, deliveryId, env.MERCHANT_ID).run()
+    if (result.meta.changes === 0) return errorResponse('配送单不存在', 404)
+    return jsonResponse({ id: deliveryId, deliveryStatus: status, updatedAt: now })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return errorResponse(`更新配送单失败: ${msg}`, 400)
+  }
+}
+
 export async function handleExportDelivery(request: Request, env: Env): Promise<Response> {
   try {
     const url = new URL(request.url)
