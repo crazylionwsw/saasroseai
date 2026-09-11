@@ -7,6 +7,7 @@ import { handleCreatePayment, handleStripeWebhook, handleQueryPayment, handleSqu
 import { handleGenerateQr, handleVerifyQr } from './qr'
 import { handleStartStripeConnect, handleStripeConnectCallback } from './stripe-connect'
 import { handleStartSquareConnect, handleSquareConnectCallback } from './square-connect'
+import { handleSetup, handleLogin, handleLogout, handleMe, handleListStaff, handleCreateStaff, authorizeMerchantRequest } from './rbac'
 import { handleCreateCart, handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleCalculateCart } from './cart'
 import { getNotifierStub, notifyOrderChanged } from './notify-do'
 import { handleGetTaxRules, handleUpdateTaxRules } from './tax'
@@ -22,6 +23,13 @@ const { preflight, corsify } = cors()
 const router = AutoRouter({ before: [preflight], finally: [corsify] })
 
 router.get('/api/health', () => jsonResponse({ status: 'ok' }))
+
+router.post('/api/auth/setup', handleSetup)
+router.post('/api/auth/login', handleLogin)
+router.post('/api/auth/logout', handleLogout)
+router.get('/api/auth/me', handleMe)
+router.get('/api/staff', handleListStaff)
+router.post('/api/staff', handleCreateStaff)
 
 router.post('/api/storefront/generate', (request: Request, env: Env) => request.json().then(data => handleGenerateSite(request, env, data)))
 router.get('/api/storefront/templates', (_request: Request, env: Env) => handleGetTemplateList(env))
@@ -102,12 +110,25 @@ export default {
     if (url.pathname === '/api/payments/webhook/square') {
       return handleSquareWebhook(request, env)
     }
+    if (url.pathname === '/api/health') {
+      return jsonResponse({ status: 'ok' })
+    }
+
+    // Non-API paths serve the merchant dashboard SPA (login screen / app)
+    if (!url.pathname.startsWith('/api/')) {
+      return serveDashboardHtml(request, env)
+    }
+
     const authResult = await verifyMerchant(env)
     if (authResult.status !== 'active') {
       return authResult.status === 'auth_error'
-        ? handleUnauthenticatedRequest(request, env)
+        ? errorResponse('商户认证失败', 401, 401)
         : errorResponse('商户已停用', 403, 403)
     }
+
+    const authz = await authorizeMerchantRequest(request, env)
+    if (authz) return authz
+
     return router.fetch(request, env, ctx)
   },
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
@@ -138,13 +159,6 @@ async function runKnowledgeSync(env: Env): Promise<{ success: boolean; stats?: a
 async function handleSyncKnowledgeNow(_request: Request, env: Env): Promise<Response> {
   const result = await runKnowledgeSync(env)
   return jsonResponse(result)
-}
-
-async function handleUnauthenticatedRequest(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url)
-  if (url.pathname === '/api/health') return jsonResponse({ status: 'ok' })
-  if (url.pathname.startsWith('/api/')) return errorResponse('未授权', 401, 401)
-  return serveDashboardHtml(request, env)
 }
 
 async function serveDashboardHtml(request: Request, env: Env): Promise<Response> {
@@ -188,8 +202,10 @@ function dashboardHtml(merchantName: string, lang: string): string {
       categoryAdd: '添加分类', categoryRename: '重命名分类', categoryDelete: '删除分类',
       itemAdd: '添加菜品', itemDelete: '删除菜品', save: '保存', saved: '已保存',
       settingsHours: '营业时间', settingsTax: '税率', settingsOrdering: '启用点餐',
-      settingsPayment: '启用支付', settingsChat: '启用客服', settingsPhone: '启用电话',
+      settingsPayment: '启用支付',       settingsChat: '启用客服', settingsPhone: '启用电话',
       actions: '操作',
+      loginTitle: '员工登录', loginEmail: '邮箱', loginPassword: '密码',
+      loginButton: '登录', loginSetup: '首次初始化', setupTokenPrompt: '初始化令牌 (MERCHANT_TOKEN)',
       totalOrders: '总订单', todayOrders: '今日订单', monthlyOrders: '本月订单',
       totalRevenue: '总收入', todayRevenue: '今日收入', monthlyRevenue: '本月收入',
       pendingOrders: '待处理', recentOrders: '最近订单', topItems: '热销菜品',
@@ -207,6 +223,8 @@ function dashboardHtml(merchantName: string, lang: string): string {
       settingsOrdering: 'Enable Ordering', settingsPayment: 'Enable Payment',
       settingsChat: 'Enable Chat', settingsPhone: 'Enable Phone',
       actions: 'Actions',
+      loginTitle: 'Staff Login', loginEmail: 'Email', loginPassword: 'Password',
+      loginButton: 'Sign In', loginSetup: 'First-time setup', setupTokenPrompt: 'Setup token (MERCHANT_TOKEN)',
       totalOrders: 'Total Orders', todayOrders: 'Today',
       monthlyOrders: 'This Month', totalRevenue: 'Total Revenue', todayRevenue: 'Today',
       monthlyRevenue: 'This Month', pendingOrders: 'Pending', recentOrders: 'Recent Orders',
@@ -225,6 +243,8 @@ function dashboardHtml(merchantName: string, lang: string): string {
       settingsOrdering: 'Activer Commande', settingsPayment: 'Activer Paiement',
       settingsChat: 'Activer Chat', settingsPhone: 'Activer Téléphone',
       actions: 'Actions',
+      loginTitle: 'Connexion Personnel', loginEmail: 'Email', loginPassword: 'Mot de passe',
+      loginButton: 'Se connecter', loginSetup: 'Première configuration', setupTokenPrompt: 'Jeton d\'initialisation (MERCHANT_TOKEN)',
       totalOrders: 'Total Commandes', todayOrders: 'Aujourd\'hui',
       monthlyOrders: 'Ce Mois', totalRevenue: 'Revenu Total', todayRevenue: 'Aujourd\'hui',
       monthlyRevenue: 'Ce Mois', pendingOrders: 'En Attente', recentOrders: 'Commandes Récentes',
@@ -295,12 +315,51 @@ select{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.85re
   <div class="topbar"><h1 id="pageTitle">${L('navOverview')}</h1><div id="topActions"></div></div>
   <div id="content"></div>
 </div>
+<div id="loginOverlay" style="position:fixed;inset:0;background:#1a1a2e;display:none;align-items:center;justify-content:center;z-index:10000">
+  <div style="background:#fff;padding:32px;border-radius:12px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <h2 style="margin-bottom:16px;font-size:1.2rem">${L('loginTitle')}</h2>
+    <input id="loginEmail" placeholder="${L('loginEmail')}" autocomplete="username" style="width:100%;padding:10px;margin-bottom:10px;border:1px solid #ddd;border-radius:6px">
+    <input id="loginPassword" type="password" placeholder="${L('loginPassword')}" autocomplete="current-password" style="width:100%;padding:10px;margin-bottom:14px;border:1px solid #ddd;border-radius:6px">
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">${L('loginButton')}</button>
+    <div id="loginError" style="color:#dc3545;font-size:0.82rem;margin-top:10px"></div>
+    <div style="margin-top:14px;font-size:0.78rem;color:#999;text-align:center"><a href="#" onclick="doSetup();return false" style="color:#667eea">${L('loginSetup')}</a></div>
+  </div>
+</div>
 <script>
 const L = ${JSON.stringify(dict)};
 function t(k){return L[k]||k}
 const API = window.location.origin;
+function getToken(){return localStorage.getItem('rose_staff_token')||''}
+window.showLogin=function(){document.getElementById('loginOverlay').style.display='flex'}
+window.doLogin=async function(){
+  const email=document.getElementById('loginEmail').value,password=document.getElementById('loginPassword').value
+  try{
+    const r=await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})})
+    const d=await r.json()
+    if(!r.ok){document.getElementById('loginError').textContent=d.error||'登录失败';return}
+    localStorage.setItem('rose_staff_token',d.token);location.reload()
+  }catch(e){document.getElementById('loginError').textContent='网络错误'}
+}
+window.doSetup=async function(){
+  const token=prompt(L.setupTokenPrompt);if(!token)return
+  const email=prompt(L.loginEmail);if(!email)return
+  const password=prompt(L.loginPassword);if(!password)return
+  try{
+    const r=await fetch(API+'/api/auth/setup',{method:'POST',headers:{'Content-Type':'application/json','X-Setup-Token':token},body:JSON.stringify({email,password})})
+    const d=await r.json()
+    if(!r.ok){alert(d.error||'初始化失败');return}
+    localStorage.setItem('rose_staff_token',d.token);location.reload()
+  }catch(e){alert('网络错误')}
+}
 
-async function api(path,opts={}){const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json',...opts.headers}});return r.json()}
+async function api(path,opts={}){
+  const h={'Content-Type':'application/json',...(opts.headers||{})}
+  const tk=getToken();if(tk)h['Authorization']='Bearer '+tk
+  const r=await fetch(API+path,{...opts,headers:h})
+  if(r.status===401){showLogin();throw new Error('unauthorized')}
+  if(r.status===403){throw new Error('权限不足')}
+  return r.json()
+}
 
 function showPage(page){document.querySelectorAll('.sidebar a').forEach(a=>a.classList.remove('active'));document.querySelector(\`[data-page="\${page}"]\`)?.classList.add('active');document.getElementById('pageTitle').textContent=t('nav'+page.charAt(0).toUpperCase()+page.slice(1));window.__page=page;window['render'+page.charAt(0).toUpperCase()+page.slice(1)]()}
 
@@ -511,7 +570,17 @@ async function renderDeliveries(){
 async function renderSuppliers(){renderInventory()}
 
 document.querySelectorAll('.sidebar a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();showPage(a.dataset.page)}))
-showPage('overview')
+
+async function initApp(){
+  try{
+    const r=await fetch(API+'/api/auth/me',{headers:{'Authorization':'Bearer '+getToken()}})
+    if(r.status!==200){showLogin();return}
+    const me=await r.json();window.__role=me.role
+    document.getElementById('loginOverlay').style.display='none'
+    showPage('overview')
+  }catch(e){showLogin()}
+}
+initApp()
 
 // Real-time order notifications (WebSocket) with polling fallback
 (function(){
@@ -520,7 +589,7 @@ showPage('overview')
     if(!toast){toast=document.createElement('div');toast.style.cssText='position:fixed;top:16px;right:16px;z-index:9999;background:#1a1a2e;color:#fff;padding:10px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.25);font-size:0.85rem;max-width:320px;';document.body.appendChild(toast)}
     toast.textContent=msg;toast.style.display='block';clearTimeout(showToast._t);showToast._t=setTimeout(()=>{toast.style.display='none'},4500)
   }
-  function refreshCurrent(){const p=window.__page;if(p==='overview')renderOverview();else if(p==='orders')renderOrders()}
+  function refreshCurrent(){if(!getToken())return;const p=window.__page;if(p==='overview')renderOverview();else if(p==='orders')renderOrders()}
   function connectNotify(){
     try{
       const proto=location.protocol==='https:'?'wss:':'ws:'
