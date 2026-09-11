@@ -115,10 +115,33 @@ npx wrangler d1 execute rose-saas-central --file central/migrations/001_add_audi
 
 ### 商户部署
 
+一键部署商户到其独立 Cloudflare 账号（创建 D1/R2/Vectorize/Pages、执行迁移、部署 Worker、注入 Secrets、健康检查、回注册）：
+
 ```bash
-# 一键部署商户到独立账户
-./scripts/deploy-merchant.sh <merchant-id> <cf-email> <cf-api-key>
+./scripts/deploy-merchant.sh \
+  --merchant-id=m-abc123 \
+  --cf-email=owner@example.com \
+  --cf-api-token=<商户CFToken> \
+  --central-auth-url=https://rose-saas-central-api.touchwant.workers.dev \
+  --merchant-token=<商户JWT> \
+  --admin-token=<中央管理员Token> \
+  --stripe-secret-key=sk_xxx --stripe-webhook-secret=whsec_xxx \
+  --square-access-token=EAAAxxx --square-location-id=Lxxx
 ```
+
+仅对已有商户执行迁移（幂等，记录于 `_migrations` 表）：
+
+```bash
+./scripts/migrate-merchant.sh --db-name restaurant-m-abc123 --cf-api-token <token>
+```
+
+批量更新（需提供各商户 CF Token 映射文件）：
+
+```bash
+./scripts/update-all.sh --central-url=... --admin-token=... --tokens-file=merchant-tokens.json
+```
+
+**商户后台首次登录**：访问商户 Worker 根路径 → 「首次初始化」→ 输入 `MERCHANT_TOKEN` + 邮箱 + 密码创建 owner 账号。
 
 ## 安全
 

@@ -24,6 +24,12 @@
       { "name": "ORDER_NOTIFY_DO", "class_name": "OrderNotifier" }
     ]
   },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ChatRoom", "PhoneCall", "OrderNotifier"]
+    }
+  ],
   "triggers": {
     "crons": [
       "*/5 * * * *"
